@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0A0A0A;
+    color: #FFFFFF;
+    font-family: 'Geist', 'Satoshi', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Geist', 'Satoshi', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+}
+
+/* Minimal Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A0A0A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #171717;
+  border-radius: 9999px;
+  border: 1px solid #0A0A0A;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FFFFFF;
+}
+
+/* Premium Minimal Cards */
+.premium-card {
+  background-color: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: #1A1A1A;
+  transform: translateY(-2px);
+}
+
+/* Mouse Follower */
+.mouse-follower {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  background-color: #FFFFFF;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: difference;
+}
+
+.mouse-follower-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), height 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Clean Underline Animation for Links */
+.awwwards-link {
+  position: relative;
+  transition: color 0.3s ease;
+}
+
+.awwwards-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background-color: #FFFFFF;
+  transform: scaleX(0);
+  transform-origin: bottom right;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.awwwards-link:hover::after {
+  transform: scaleX(1);
+  transform-origin: bottom left;
+}
+
+/* Disable Custom Cursor on Touch Devices */
+@media (min-width: 1024px) {
+  .custom-cursor-area {
+    cursor: none;
+  }
+  .custom-cursor-area a, .custom-cursor-area button {
+    cursor: none;
+  }
+}
+
+/* Cinematic Vignette Overlay */
+.cinematic-vignette {
+  background: radial-gradient(circle, transparent 20%, rgba(10, 10, 10, 0.6) 70%, #0A0A0A 100%);
+  pointer-events: none;
+}
+
+/* Custom Cursor Toggle for Video Player Interactivity */
+body.hide-custom-cursor {
+  cursor: auto !important;
+}
+
+body.hide-custom-cursor .mouse-follower,
+body.hide-custom-cursor .mouse-follower-ring {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+.video-player-container,
+.video-player-container iframe,
+.video-player-container video,
+.video-player-container .react-player,
+.video-player-container [role="application"] {
+  cursor: auto !important;
+}

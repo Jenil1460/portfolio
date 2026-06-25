@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Local Environment Credentials
+.env
+.env.local
+server/.env
+
+# Build Outputs
+client/dist/
+
+# Local Uploads
+server/uploads/*
+!server/uploads/.gitkeep
+
+# System/IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
