@@ -45,16 +45,33 @@ API.interceptors.response.use(
 
 export const resolveMediaUrl = (url) => {
   if (!url) return '';
-  const rootUrl = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : (baseUrl.includes('/api/') ? baseUrl.split('/api')[0] : baseUrl);
-  
+
+  // Derive the server root (no trailing slash).
+  // When VITE_API_URL is a relative path like "/api", baseUrl has no domain.
+  // In that case use window.location.origin so that localhost URLs stored in
+  // the database are rewritten to the actual live domain automatically.
+  let rootUrl;
+  if (baseUrl.startsWith('http')) {
+    // Absolute URL — strip the /api suffix to get the server root
+    rootUrl = baseUrl.endsWith('/api')
+      ? baseUrl.slice(0, -4)
+      : baseUrl.split('/api')[0];
+  } else {
+    // Relative URL (e.g. "/api") — use the browser's current origin at runtime
+    rootUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  }
+
+  // Relative paths: prepend server root
   if (url.startsWith('/')) {
     return `${rootUrl}${url}`;
   }
-  
-  if (/https?:\/\/(localhost|127\.0\.0\.1):\d+/.test(url)) {
-    return url.replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+/g, rootUrl);
+
+  // Absolute localhost URLs stored in DB: replace host with real server root
+  // e.g. "http://localhost:5000/uploads/foo.jpg" → "https://yourapp.onrender.com/uploads/foo.jpg"
+  if (/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(url)) {
+    return url.replace(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/g, rootUrl);
   }
-  
+
   return url;
 };
 
