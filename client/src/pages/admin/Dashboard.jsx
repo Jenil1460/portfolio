@@ -209,6 +209,123 @@ const Dashboard = () => {
 
   // --- Video CRUD Handlers ---
 
+  // --- Automatic Thumbnail Generation Helpers ---
+
+  const generateVideoThumbnail = (videoUrl) => {
+    return new Promise((resolve, reject) => {
+      const videoEl = document.createElement('video');
+      videoEl.src = videoUrl;
+      videoEl.crossOrigin = 'anonymous';
+      videoEl.preload = 'auto';
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+
+      videoEl.addEventListener('loadedmetadata', () => {
+        const seekTime = Math.min(3, videoEl.duration / 2 || 1);
+        videoEl.currentTime = seekTime;
+      });
+
+      videoEl.addEventListener('seeked', () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = videoEl.videoWidth || 640;
+          canvas.height = videoEl.videoHeight || 360;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          
+          canvas.toBlob(async (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to create blob from canvas'));
+              return;
+            }
+            const file = new File([blob], `thumbnail-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            try {
+              const res = await API.post('/upload/image', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+              if (res.data.success) {
+                resolve(res.data.url);
+              } else {
+                reject(new Error('Thumbnail upload endpoint failed'));
+              }
+            } catch (err) {
+              reject(err);
+            }
+          }, 'image/jpeg', 0.85);
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      videoEl.addEventListener('error', (err) => {
+        reject(new Error('Failed to load video source for frame extraction'));
+      });
+    });
+  };
+
+  const autoResolveThumbnail = async (url, categoryId) => {
+    // 1. Google Drive
+    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+      let fileId = '';
+      if (url.includes('/file/d/')) {
+        const match = url.match(/\/file\/d\/([^/]+)/);
+        if (match) fileId = match[1];
+      } else {
+        const match = url.match(/[?&]id=([^&]+)/);
+        if (match) fileId = match[1];
+      }
+      if (fileId) {
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+      }
+    }
+
+    // 2. YouTube
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      let videoId = '';
+      if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split(/[?#]/)[0];
+      } else if (url.includes('embed/')) {
+        videoId = url.split('embed/')[1]?.split(/[?#]/)[0];
+      } else {
+        const match = url.match(/[?&]v=([^&]+)/);
+        if (match) videoId = match[1];
+      }
+      if (videoId) {
+        return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+      }
+    }
+
+    // 3. Vimeo
+    if (url.includes('vimeo.com')) {
+      const match = url.match(/(?:video\/|vimeo\.com\/)(\d+)/);
+      if (match) {
+        const videoId = match[1];
+        try {
+          const res = await fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`);
+          const data = await res.json();
+          if (data.thumbnail_url) {
+            return data.thumbnail_url;
+          }
+        } catch (e) {
+          console.warn('Vimeo oEmbed thumbnail fetch failed:', e.message);
+        }
+      }
+    }
+
+    // 4. Direct HTML5 / R2 Video canvas capture
+    try {
+      const extractedUrl = await generateVideoThumbnail(url);
+      return extractedUrl;
+    } catch (err) {
+      console.warn('Direct video thumbnail extraction failed, using category cover fallback:', err.message);
+      const selectedCat = categories.find(c => c._id === categoryId);
+      return selectedCat ? selectedCat.coverImage : 'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&q=80&w=600';
+    }
+  };
+
   const openAddVideo = () => {
     setVidTitle('');
     setVidCategory('');
@@ -241,20 +358,24 @@ const Dashboard = () => {
       showToast('Video link is required', 'error');
       return;
     }
-    if (!vidThumbnail) {
-      showToast('Thumbnail is required', 'error');
-      return;
-    }
-
-    const payload = {
-      title: vidTitle.trim(),
-      category: vidCategory,
-      videoUrl: vidVideoUrl.trim(),
-      thumbnail: vidThumbnail,
-    };
 
     setVidSaving(true);
     try {
+      let resolvedThumbnail = vidThumbnail;
+      const isNewUrl = vidModal.mode === 'add' || vidVideoUrl.trim() !== vidModal.data?.videoUrl;
+
+      if (isNewUrl) {
+        showToast('Extracting thumbnail from video URL...', 'info');
+        resolvedThumbnail = await autoResolveThumbnail(vidVideoUrl.trim(), vidCategory);
+      }
+
+      const payload = {
+        title: vidTitle.trim(),
+        category: vidCategory,
+        videoUrl: vidVideoUrl.trim(),
+        thumbnail: resolvedThumbnail,
+      };
+
       if (vidModal.mode === 'edit') {
         const editingId = vidModal.data?._id;
         const res = await API.put(`/videos/${editingId}`, payload);
@@ -726,50 +847,6 @@ const Dashboard = () => {
                 </span>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
-                  Thumbnail
-                </label>
-                {vidThumbnail ? (
-                  <div className="relative aspect-video rounded-xl overflow-hidden border border-white/15 group max-w-full">
-                    <img src={vidThumbnail} alt="Thumbnail Preview" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setVidThumbnail('')}
-                      className="absolute top-2.5 right-2.5 bg-black/80 text-red-400 hover:text-red-300 p-2.5 rounded-full transition-colors border border-white/5 cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="border-2 border-dashed border-white/10 hover:border-white/20 rounded-xl aspect-video flex flex-col items-center justify-center p-6 transition-colors max-w-full">
-                    <div className="bg-neutral-900 border border-white/5 p-3 rounded-full mb-2.5">
-                      <Upload className="w-6 h-6 text-neutral-400" />
-                    </div>
-                    <label className="text-sm font-bold cursor-pointer text-white underline hover:text-neutral-300 min-h-[44px] flex items-center justify-center px-4">
-                      Upload Thumbnail
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, setVidThumbnail, setVidUploading)}
-                        disabled={vidUploading}
-                      />
-                    </label>
-                    <span className="text-[10px] text-neutral-500 mt-1 uppercase tracking-widest font-light">
-                      PNG, JPG up to 10MB
-                    </span>
-                  </div>
-                )}
-
-                {vidUploading && (
-                  <div className="flex items-center space-x-2 text-xs text-neutral-400 animate-pulse pt-1">
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Uploading Thumbnail to R2...</span>
-                  </div>
-                )}
-              </div>
-
               <div className="flex flex-col sm:flex-row justify-end gap-3 sm:space-x-3 pt-4 border-t border-white/5">
                 <button
                   type="button"
@@ -780,7 +857,7 @@ const Dashboard = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={vidSaving || vidUploading}
+                  disabled={vidSaving}
                   className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-white text-black px-5 py-3 sm:py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors disabled:opacity-50 cursor-pointer min-h-[44px]"
                 >
                   {vidSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
