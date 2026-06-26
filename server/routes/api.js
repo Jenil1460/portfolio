@@ -110,7 +110,9 @@ const urlCache = new Map(); // Cache: fileId -> { finalUrl, expiresAt }
 
 const getFinalDriveUrl = async (fileId) => {
   let tempUrl = `https://drive.google.com/uc?export=media&id=${fileId}`;
+  let lastUrl = tempUrl;
   let response;
+
   try {
     response = await fetchDriveStream(tempUrl, null);
   } catch (err) {
@@ -118,43 +120,6 @@ const getFinalDriveUrl = async (fileId) => {
     return tempUrl;
   }
 
-  // Check for virus scan warning page (usually returns 200 OK with HTML content-type)
-  if (response.statusCode === 200 && response.headers['content-type']?.includes('text/html')) {
-    const body = await new Promise((resolve) => {
-      let data = '';
-      response.on('data', (chunk) => {
-        data += chunk;
-        if (data.length > 100000) {
-          resolve(data);
-        }
-      });
-      response.on('end', () => resolve(data));
-      response.on('error', () => resolve(data));
-    });
-    response.destroy();
-
-    const confirmMatch = body.match(/confirm=([^&"\s]+)/);
-    if (confirmMatch && confirmMatch[1]) {
-      const confirmToken = confirmMatch[1];
-      tempUrl = `https://drive.google.com/uc?export=media&id=${fileId}&confirm=${confirmToken}`;
-      try {
-        response = await fetchDriveStream(tempUrl, null);
-      } catch (err) {
-        console.error('Fetch with confirm token error:', err.message);
-        return tempUrl;
-      }
-    } else {
-      tempUrl = `https://drive.google.com/uc?export=media&id=${fileId}&confirm=t`;
-      try {
-        response = await fetchDriveStream(tempUrl, null);
-      } catch (err) {
-        console.error('Fallback fetch with confirm=t error:', err.message);
-        return tempUrl;
-      }
-    }
-  }
-
-  let lastUrl = tempUrl;
   try {
     for (let redirectCount = 0; redirectCount < 8; redirectCount += 1) {
       if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
@@ -162,10 +127,53 @@ const getFinalDriveUrl = async (fileId) => {
         lastUrl = tempUrl;
         response.destroy();
         response = await fetchDriveStream(tempUrl, null);
-      } else {
-        response.destroy();
-        break;
+        continue;
       }
+
+      // If we hit a 200 OK and it's an HTML page (virus scan warning), extract confirm token and uuid
+      if (response.statusCode === 200 && response.headers['content-type']?.includes('text/html')) {
+        const body = await new Promise((resolve) => {
+          let data = '';
+          response.on('data', (chunk) => {
+            data += chunk;
+            if (data.length > 100000) {
+              resolve(data);
+            }
+          });
+          response.on('end', () => resolve(data));
+          response.on('error', () => resolve(data));
+        });
+        response.destroy();
+
+        // Extract hidden inputs for confirmation
+        const inputs = {};
+        const inputRegex = /<input[^>]+name="([^"]+)"[^>]+value="([^"]+)"/g;
+        let match;
+        while ((match = inputRegex.exec(body)) !== null) {
+          inputs[match[1]] = match[2];
+        }
+
+        if (inputs.confirm && inputs.uuid) {
+          const separator = lastUrl.includes('?') ? '&' : '?';
+          tempUrl = `${lastUrl}${separator}confirm=${inputs.confirm}&uuid=${inputs.uuid}`;
+          response = await fetchDriveStream(tempUrl, null);
+          lastUrl = tempUrl;
+          continue;
+        } else {
+          const confirmMatch = body.match(/confirm=([^&"\s>]+)/);
+          if (confirmMatch && confirmMatch[1]) {
+            const confirmToken = confirmMatch[1];
+            const separator = lastUrl.includes('?') ? '&' : '?';
+            tempUrl = `${lastUrl}${separator}confirm=${confirmToken}`;
+            response = await fetchDriveStream(tempUrl, null);
+            lastUrl = tempUrl;
+            continue;
+          }
+        }
+      }
+
+      response.destroy();
+      break;
     }
   } catch (err) {
     console.error('Redirect loop error:', err.message);
