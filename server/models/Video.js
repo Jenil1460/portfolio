@@ -64,6 +64,8 @@ class VideoProxy {
   static create(data) { return this.getTarget().create(data); }
   static countDocuments(query) { return this.getTarget().countDocuments(query); }
   static findByIdAndUpdate(id, update, options) { return this.getTarget().findByIdAndUpdate(id, update, options); }
+  static deleteMany(query) { return this.getTarget().deleteMany(query); }
+  static deleteOne(query) { return this.getTarget().deleteOne(query); }
 }
 
 module.exports = VideoProxy;

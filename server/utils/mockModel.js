@@ -263,6 +263,40 @@ const mockModelCreator = (collectionName, schema) => {
       return filtered.length;
     }
 
+    static async deleteMany(query) {
+      const db = readData();
+      const items = db[collectionName] || [];
+      const kept = [];
+      let deletedCount = 0;
+      for (let item of items) {
+        if (matchQuery(item, query)) {
+          deletedCount++;
+        } else {
+          kept.push(item);
+        }
+      }
+      db[collectionName] = kept;
+      writeData(db);
+      return { deletedCount };
+    }
+
+    static async deleteOne(query) {
+      const db = readData();
+      const items = db[collectionName] || [];
+      const kept = [];
+      let deletedCount = 0;
+      for (let item of items) {
+        if (deletedCount === 0 && matchQuery(item, query)) {
+          deletedCount++;
+        } else {
+          kept.push(item);
+        }
+      }
+      db[collectionName] = kept;
+      writeData(db);
+      return { deletedCount };
+    }
+
     static findByIdAndUpdate(id, update, options) {
       const db = readData();
       const items = db[collectionName] || [];
