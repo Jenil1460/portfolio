@@ -155,7 +155,8 @@ const VideoPlayerPage = () => {
         controls
         playsInline
         webkit-playsinline="true"
-        className="absolute inset-0 w-full h-full object-contain bg-black"
+        className="absolute inset-0 w-full h-full bg-transparent outline-none"
+        style={{ objectFit: 'cover' }}
         onEnded={handleVideoEnded}
         onLoadedMetadata={handleLoadedMetadata}
       />
@@ -212,14 +213,14 @@ const VideoPlayerPage = () => {
         </div>
 
         {/* Responsive Aspect-Ratio Video Container */}
-        <div className="w-full max-w-full mx-auto">
+        <div className="w-full max-w-full mx-auto flex justify-center">
           <div
-            className={`video-player-container relative w-full mx-auto rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl transition-all duration-500 ${
+            className={`video-player-container relative w-full rounded-[16px] overflow-hidden border border-white/5 shadow-2xl transition-all duration-500 bg-transparent ${
               isPortrait
-                ? 'max-w-[420px]'
+                ? 'max-w-full sm:max-w-[420px]'
                 : 'max-w-full'
             }`}
-            style={{ aspectRatio: ratio }}
+            style={{ aspectRatio: isPortrait ? ratio : (ratio || 16/9) }}
           >
             {renderActivePlayer(source)}
           </div>
