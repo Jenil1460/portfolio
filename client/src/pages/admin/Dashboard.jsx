@@ -315,6 +315,15 @@ const Dashboard = () => {
       }
     }
 
+    // 4. Instagram
+    if (url.includes('instagram.com')) {
+      const match = url.match(/instagram\.com\/(?:p|reel|tv)\/([^/?#&]+)/);
+      if (match) {
+        const code = match[1];
+        return `https://www.instagram.com/p/${code}/media/?size=l`;
+      }
+    }
+
     // 4. Direct HTML5 / R2 Video canvas capture
     try {
       const extractedUrl = await generateVideoThumbnail(url);

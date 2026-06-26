@@ -57,6 +57,16 @@ const parseVideoSource = (rawUrl) => {
     };
   }
 
+  const instagramMatch = normalized.match(/instagram\.com\/(?:p|reel|tv)\/([^/?#&]+)/);
+  if (instagramMatch) {
+    const code = instagramMatch[1];
+    return {
+      type: 'instagram',
+      code,
+      url: normalized,
+    };
+  }
+
   return { type: 'direct', src: normalized };
 };
 
@@ -331,6 +341,68 @@ const IframePlayer = ({ embedUrl }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// InstagramPlayer — Instagram posts/reels.
+// Since Instagram blocks embedding inside iframes on external sites via strict security
+// headers, we show a clean poster thumbnail with the Instagram brand overlay.
+// Clicking it opens the reel/post in a new tab (which opens the native Instagram app).
+// ─────────────────────────────────────────────────────────────────────────────
+const InstagramPlayer = ({ source, storedThumbnail }) => {
+  const { ratio } = useImageRatio(storedThumbnail);
+  const displayRatio = ratio || 0.8; // Reels are vertical, default to 4:5
+  const { outerClass, containerStyle } = getLayout(displayRatio);
+
+  return (
+    <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
+      <div
+        onClick={() => window.open(source.url, '_blank')}
+        className="relative overflow-hidden rounded-[16px] bg-[#0c0c0c] border border-white/5 shadow-2xl video-player-container cursor-pointer group flex items-center justify-center transition-all duration-300 hover:border-white/10"
+        style={containerStyle}
+      >
+        {storedThumbnail ? (
+          <img
+            src={storedThumbnail}
+            alt="Play Reel"
+            className="absolute inset-0 w-full h-full object-cover filter brightness-[0.5] transition-transform duration-700 ease-out group-hover:scale-103"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#8a3ab9]/20 via-[#e95950]/20 to-[#fccc63]/20" />
+        )}
+        
+        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300" />
+        
+        <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4 z-10">
+          <div className="bg-white hover:bg-neutral-100 text-black p-5 rounded-full shadow-2xl flex items-center justify-center transform group-hover:scale-110 transition-all duration-300">
+            <svg
+              className="w-8 h-8 text-black fill-current"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+            </svg>
+          </div>
+          <span className="text-[10px] uppercase tracking-[0.2em] bg-black/80 border border-white/10 px-5 py-2 rounded-full font-bold text-neutral-300">
+            Open in Instagram
+          </span>
+        </div>
+      </div>
+      
+      <div className="flex flex-col items-center mt-4 space-y-2">
+        <button
+          onClick={() => window.open(source.url, '_blank')}
+          className="inline-flex items-center justify-center space-x-2 text-[10px] uppercase tracking-[0.2em] bg-white hover:bg-neutral-200 text-black px-6 py-3 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-md"
+        >
+          <span>Watch Reel</span>
+          <ExternalLink className="w-3 h-3 text-black" />
+        </button>
+        <p className="text-[9px] text-neutral-500 font-light text-center leading-relaxed">
+          Instagram content: Click to view natively on Instagram.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Top-level dispatcher — key with video._id in parent for clean unmount
 // ─────────────────────────────────────────────────────────────────────────────
 const UniversalVideoPlayer = ({ video, onEnded }) => {
@@ -340,6 +412,10 @@ const UniversalVideoPlayer = ({ video, onEnded }) => {
 
   if (source.type === 'drive') {
     return <DrivePlayer source={source} storedThumbnail={storedThumbnail} onEnded={onEnded} />;
+  }
+
+  if (source.type === 'instagram') {
+    return <InstagramPlayer source={source} storedThumbnail={storedThumbnail} />;
   }
 
   if (source.type === 'youtube' || source.type === 'vimeo') {
