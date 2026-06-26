@@ -95,12 +95,14 @@ const useThumbnailRatio = (thumbnailUrl) => {
     };
 
     img.onerror = () => {
+      // If thumbnail fails to load, default to 16:9
       setRatio(16 / 9);
       setReady(true);
     };
 
-    // crossOrigin anonymous so we don't send cookies but still read dimensions
-    img.crossOrigin = 'anonymous';
+    // Do NOT set crossOrigin — we only need naturalWidth/naturalHeight (no canvas
+    // access needed), and setting it to 'anonymous' causes Google Drive thumbnail
+    // URLs to fail with a CORS error since Drive doesn't send CORS headers.
     img.src = thumbnailUrl;
 
     return () => {
