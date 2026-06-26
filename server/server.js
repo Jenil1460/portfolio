@@ -77,6 +77,22 @@ app.use('/api', apiRoutes);
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// API Landing Page
+app.get('/', (req, res) => {
+  res.status(200).send(`
+    <div style="font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #0A0A0A; color: #FFFFFF; text-align: center; padding: 20px; box-sizing: border-box; overflow: hidden; margin: -8px;">
+      <h1 style="font-size: 2rem; letter-spacing: 0.25em; font-weight: 800; text-transform: uppercase; margin: 0;">RJ.TwoShot</h1>
+      <span style="font-size: 0.75rem; letter-spacing: 0.2em; font-weight: 650; text-transform: uppercase; background-color: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 4px; color: #D4D4D4; margin-top: 12px; display: inline-block;">Portal API</span>
+      <p style="color: #737373; max-width: 450px; font-size: 0.85rem; font-weight: 300; line-height: 1.6; margin-top: 20px; margin-bottom: 0;">
+        The server is successfully running and connected to MongoDB Atlas.
+      </p>
+      <p style="color: #A3A3A3; font-size: 0.85rem; font-weight: 300; margin-top: 8px;">
+        Please access the frontend site, or view <a href="/health" style="color: #FFFFFF; font-weight: bold; text-decoration: underline;">/health</a> to verify.
+      </p>
+    </div>
+  `);
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Twoshot Portfolio Server is healthy and running.' });
