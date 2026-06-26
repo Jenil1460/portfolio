@@ -113,7 +113,7 @@ router.get('/drive/:fileId', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing Drive file ID' });
     }
 
-    let driveUrl = `https://drive.google.com/uc?export=media&id=${fileId}`;
+    let driveUrl = `https://drive.google.com/uc?export=media&id=${fileId}&confirm=t`;
     let response;
     for (let redirectCount = 0; redirectCount < 5; redirectCount += 1) {
       response = await fetchDriveStream(driveUrl, req.headers.range);

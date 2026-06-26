@@ -61,7 +61,7 @@ const parseVideoSource = (rawUrl) => {
 };
 
 const resolveDriveThumbnailUrl = (fileId) => `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
-const resolveDriveVideoUrl = (fileId) => `https://docs.google.com/uc?export=media&id=${fileId}`;
+const resolveDriveVideoUrl = (fileId) => resolveMediaUrl(`/api/drive/${fileId}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook: detect aspect ratio from an image URL
@@ -218,6 +218,36 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
   const { outerClass, containerStyle } = getLayout(ratio);
 
   if (useIframe) {
+    if (isMobile()) {
+      return (
+        <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
+          <div
+            onClick={() => window.open(source.viewUrl || source.embedUrl, '_blank')}
+            className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container cursor-pointer group animate-fade-in"
+            style={containerStyle}
+          >
+            <img
+              src={posterUrl}
+              alt="Play Video"
+              className="absolute inset-0 w-full h-full object-cover filter brightness-[0.5] transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
+              <div className="bg-white text-black p-5 rounded-full shadow-2xl flex items-center justify-center transform group-hover:scale-110 transition-all duration-300">
+                <Play className="w-8 h-8 fill-black text-black ml-1" />
+              </div>
+              <span className="text-[10px] uppercase tracking-[0.2em] bg-black/70 border border-white/10 px-5 py-2 rounded-full font-bold text-neutral-300">
+                Play in Drive
+              </span>
+            </div>
+          </div>
+          <p className="text-[10px] uppercase tracking-widest text-neutral-400 text-center mt-3 leading-relaxed px-4">
+            Stream fallback: Tap above to play natively in a new tab.
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
         <div
@@ -259,9 +289,24 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
           x-webkit-airplay="allow"
         />
       </div>
-      <p className="text-[10px] uppercase tracking-widest text-neutral-400 text-center mt-3">
-        Native Drive playback in page with mobile controls enabled.
-      </p>
+      {isMobile() ? (
+        <div className="flex flex-col items-center mt-4 space-y-2">
+          <button
+            onClick={() => window.open(source.viewUrl || source.embedUrl, '_blank')}
+            className="inline-flex items-center justify-center space-x-2 text-[10px] uppercase tracking-[0.2em] bg-white hover:bg-neutral-200 text-black px-6 py-3 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-md"
+          >
+            <span>Open in Drive</span>
+            <ExternalLink className="w-3 h-3 text-black" />
+          </button>
+          <p className="text-[9px] text-neutral-500 font-light text-center leading-relaxed">
+            Trouble playing? Tap above to open in Google Drive.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[10px] uppercase tracking-widest text-neutral-400 text-center mt-3">
+          Native Drive playback in page with mobile controls enabled.
+        </p>
+      )}
     </div>
   );
 };
