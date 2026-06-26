@@ -87,8 +87,9 @@ const VideoPlayerPage = () => {
       }
       if (fileId) {
         return {
-          type: 'drive',
+          type: 'drive-direct',
           fileId,
+          url: `https://drive.google.com/uc?export=download&id=${fileId}`,
           embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
         };
       }
@@ -132,7 +133,7 @@ const VideoPlayerPage = () => {
   };
 
   const renderActivePlayer = (source) => {
-    if (source.type === 'drive' || source.type === 'youtube' || source.type === 'vimeo') {
+    if (source.type === 'youtube' || source.type === 'vimeo') {
       return (
         <iframe
           src={source.embedUrl}
@@ -146,13 +147,15 @@ const VideoPlayerPage = () => {
       );
     }
 
-    // Direct Native Video playback (R2/MP4/etc.) with clean native controls
+    // For Google Drive, we attempt to play directly. If it fails (e.g. large file virus scan), we could fallback, but native controls are required.
+    // Direct Native Video playback (R2/MP4/Drive-direct) with clean native controls
     return (
       <video
         ref={videoRef}
         src={resolveMediaUrl(source.url)}
         poster={resolveMediaUrl(video.thumbnail)}
         controls
+        preload="metadata"
         playsInline
         webkit-playsinline="true"
         className="absolute inset-0 w-full h-full bg-transparent outline-none"
@@ -220,7 +223,7 @@ const VideoPlayerPage = () => {
                 ? 'max-w-full sm:max-w-[420px]'
                 : 'max-w-full'
             }`}
-            style={{ aspectRatio: isPortrait ? ratio : (ratio || 16/9) }}
+            style={{ aspectRatio: isPortrait ? ratio : (ratio && ratio !== 16/9 ? ratio : '16/9') }}
           >
             {renderActivePlayer(source)}
           </div>
