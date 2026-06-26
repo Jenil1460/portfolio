@@ -211,9 +211,6 @@ const Home = () => {
                       <span className="absolute top-4 left-4 bg-black/85 border border-white/5 text-[8px] uppercase tracking-widest text-white px-2.5 py-1 rounded-full font-semibold">
                         {video.category?.name}
                       </span>
-                      <span className="absolute bottom-4 right-4 bg-black/85 border border-white/5 text-[8px] uppercase tracking-widest text-white px-2.5 py-0.5 rounded font-light font-mono">
-                        {video.duration || '00:00'}
-                      </span>
                     </Link>
                     
                     {/* Minimal Information */}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2, Eye, Calendar, Clock, Check, Play, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Share2, Check, Play, ExternalLink } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
@@ -562,59 +562,25 @@ const VideoPlayerPage = () => {
           onEnded={handleEnded}
         />
 
-        {/* Info grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-4">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center space-x-3 text-[9px] uppercase tracking-widest text-neutral-500">
-              {video.category?.name && (
-                <span className="bg-white/5 border border-white/5 text-neutral-300 px-3 py-1 rounded-full font-bold">
-                  {video.category.name}
-                </span>
-              )}
-              <span className="flex items-center space-x-1 font-mono">
-                <Clock className="w-3 h-3" />
-                <span>{video.duration || '00:00'}</span>
+        {/* Info section */}
+        <div className="pt-4 space-y-4 max-w-3xl">
+          <div className="flex items-center space-x-3 text-[9px] uppercase tracking-widest text-neutral-500">
+            {video.category?.name && (
+              <span className="bg-white/5 border border-white/5 text-neutral-300 px-3 py-1 rounded-full font-bold">
+                {video.category.name}
               </span>
-            </div>
-
-            <h1 className="text-2xl md:text-4xl uppercase font-extrabold tracking-tight text-white leading-tight">
-              {video.title}
-            </h1>
-
-            {video.description && (
-              <p className="text-neutral-400 text-xs md:text-sm font-light leading-relaxed whitespace-pre-line">
-                {video.description}
-              </p>
             )}
           </div>
 
-          {/* Film metadata */}
-          <div className="bg-[#171717] border border-white/5 p-6 rounded-[16px] space-y-6 self-start">
-            <h4 className="text-[10px] uppercase tracking-widest font-bold border-b border-white/5 pb-3 text-white">
-              Film Log
-            </h4>
-            <div className="space-y-4 text-xs font-light text-neutral-400">
-              <div className="flex justify-between">
-                <span>Total Views</span>
-                <span className="font-semibold text-white font-mono flex items-center space-x-1">
-                  <Eye className="w-3.5 h-3.5 text-neutral-500" />
-                  <span>{video.views}</span>
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Date Logged</span>
-                <span className="text-white flex items-center space-x-1">
-                  <Calendar className="w-3.5 h-3.5 text-neutral-500" />
-                  <span>
-                    {new Date(video.createdAt).toLocaleDateString(undefined, {
-                      year: 'numeric',
-                      month: 'short',
-                    })}
-                  </span>
-                </span>
-              </div>
-            </div>
-          </div>
+          <h1 className="text-2xl md:text-4xl uppercase font-extrabold tracking-tight text-white leading-tight">
+            {video.title}
+          </h1>
+
+          {video.description && (
+            <p className="text-neutral-400 text-xs md:text-sm font-light leading-relaxed whitespace-pre-line">
+              {video.description}
+            </p>
+          )}
         </div>
 
         {/* Related videos */}
@@ -638,9 +604,6 @@ const VideoPlayerPage = () => {
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 brightness-90"
                       loading="lazy"
                     />
-                    <span className="absolute bottom-2 right-2 bg-black/80 text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded font-mono">
-                      {item.duration || '00:00'}
-                    </span>
                   </div>
                   <div className="p-3">
                     <h4 className="text-[11px] font-bold uppercase tracking-wide truncate group-hover:text-neutral-300 transition-colors">
