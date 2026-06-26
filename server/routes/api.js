@@ -106,30 +106,131 @@ const fetchDriveStream = (targetUrl, rangeHeader) => {
   });
 };
 
+const urlCache = new Map(); // Cache: fileId -> { finalUrl, expiresAt }
+
+const getFinalDriveUrl = async (fileId) => {
+  let tempUrl = `https://drive.google.com/uc?export=media&id=${fileId}`;
+  let response;
+  try {
+    response = await fetchDriveStream(tempUrl, null);
+  } catch (err) {
+    console.error('Initial fetchDriveStream error:', err.message);
+    return tempUrl;
+  }
+
+  // Check for virus scan warning page (usually returns 200 OK with HTML content-type)
+  if (response.statusCode === 200 && response.headers['content-type']?.includes('text/html')) {
+    const body = await new Promise((resolve) => {
+      let data = '';
+      response.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > 100000) {
+          resolve(data);
+        }
+      });
+      response.on('end', () => resolve(data));
+      response.on('error', () => resolve(data));
+    });
+    response.destroy();
+
+    const confirmMatch = body.match(/confirm=([^&"\s]+)/);
+    if (confirmMatch && confirmMatch[1]) {
+      const confirmToken = confirmMatch[1];
+      tempUrl = `https://drive.google.com/uc?export=media&id=${fileId}&confirm=${confirmToken}`;
+      try {
+        response = await fetchDriveStream(tempUrl, null);
+      } catch (err) {
+        console.error('Fetch with confirm token error:', err.message);
+        return tempUrl;
+      }
+    } else {
+      tempUrl = `https://drive.google.com/uc?export=media&id=${fileId}&confirm=t`;
+      try {
+        response = await fetchDriveStream(tempUrl, null);
+      } catch (err) {
+        console.error('Fallback fetch with confirm=t error:', err.message);
+        return tempUrl;
+      }
+    }
+  }
+
+  let lastUrl = tempUrl;
+  try {
+    for (let redirectCount = 0; redirectCount < 8; redirectCount += 1) {
+      if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+        tempUrl = response.headers.location;
+        lastUrl = tempUrl;
+        response.destroy();
+        response = await fetchDriveStream(tempUrl, null);
+      } else {
+        response.destroy();
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('Redirect loop error:', err.message);
+  }
+
+  return lastUrl;
+};
+
 router.get('/drive/:fileId', async (req, res) => {
+  let activeUpstreamResponse = null;
+
+  // Clean up upstream connection when client closes/aborts the request
+  req.on('close', () => {
+    if (activeUpstreamResponse) {
+      activeUpstreamResponse.destroy();
+    }
+  });
+
   try {
     const fileId = req.params.fileId;
     if (!fileId) {
       return res.status(400).json({ success: false, message: 'Missing Drive file ID' });
     }
 
-    let driveUrl = `https://drive.google.com/uc?export=media&id=${fileId}&confirm=t`;
-    let response;
-    for (let redirectCount = 0; redirectCount < 5; redirectCount += 1) {
-      response = await fetchDriveStream(driveUrl, req.headers.range);
-      if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
-        driveUrl = response.headers.location;
-        response.destroy();
-        continue;
-      }
-      break;
+    const cached = urlCache.get(fileId);
+    let driveUrl;
+
+    if (cached && cached.expiresAt > Date.now()) {
+      driveUrl = cached.finalUrl;
+    } else {
+      driveUrl = await getFinalDriveUrl(fileId);
+      urlCache.set(fileId, {
+        finalUrl: driveUrl,
+        expiresAt: Date.now() + 3 * 60 * 60 * 1000,
+      });
     }
+
+    // Request the final CDN stream with client range headers
+    let response = await fetchDriveStream(driveUrl, req.headers.range);
 
     if (!response) {
       return res.status(502).json({ success: false, message: 'Unable to proxy Drive video' });
     }
 
-    const statusCode = response.statusCode >= 400 ? response.statusCode : response.statusCode;
+    // If the cached URL failed (e.g. 403 or 410 Gone), try to re-resolve and retry once
+    if (response && [403, 410].includes(response.statusCode) && cached) {
+      console.log(`Cached URL for file ${fileId} failed with status ${response.statusCode}. Retrying with fresh URL...`);
+      response.destroy();
+      urlCache.delete(fileId);
+
+      driveUrl = await getFinalDriveUrl(fileId);
+      urlCache.set(fileId, {
+        finalUrl: driveUrl,
+        expiresAt: Date.now() + 3 * 60 * 60 * 1000,
+      });
+
+      response = await fetchDriveStream(driveUrl, req.headers.range);
+      if (!response) {
+        return res.status(502).json({ success: false, message: 'Unable to proxy Drive video' });
+      }
+    }
+
+    activeUpstreamResponse = response;
+
+    const statusCode = response.statusCode;
     const headersToCopy = [
       'content-type',
       'content-length',
@@ -150,15 +251,12 @@ router.get('/drive/:fileId', async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.status(statusCode);
 
-    if (statusCode >= 400) {
-      response.pipe(res);
-      return;
-    }
-
     response.pipe(res);
   } catch (error) {
     console.error('Drive proxy error:', error);
-    res.status(500).json({ success: false, message: 'Drive proxy failed' });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Drive proxy failed' });
+    }
   }
 });
 

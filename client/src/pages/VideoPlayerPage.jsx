@@ -292,7 +292,13 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
           preload="metadata"
           onLoadedMetadata={() => {}}
           onEnded={onEnded}
-          onError={() => setUseIframe(true)}
+          onError={(e) => {
+            const mediaError = e.currentTarget.error;
+            console.warn('DrivePlayer HTML5 video error:', mediaError);
+            if (mediaError && [3, 4].includes(mediaError.code)) {
+              setUseIframe(true);
+            }
+          }}
           className="absolute inset-0 w-full h-full"
           style={{ objectFit: 'contain', background: '#000' }}
           webkit-playsinline="true"
