@@ -17,6 +17,7 @@ const VideoPlayerPage = () => {
   const [playerHovered, setPlayerHovered] = useState(false);
   const [playbackStarted, setPlaybackStarted] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState('landscape'); // 'landscape' or 'portrait'
   
   const playerWrapperRef = useRef(null);
 
@@ -60,6 +61,24 @@ const VideoPlayerPage = () => {
     
     fetchVideoDetails();
   }, [id]);
+
+  // Determine video aspect ratio dynamically based on thumbnail dimensions
+  useEffect(() => {
+    if (video && video.thumbnail) {
+      const img = new Image();
+      img.src = video.thumbnail;
+      img.onload = () => {
+        if (img.width < img.height) {
+          setAspectRatio('portrait');
+        } else {
+          setAspectRatio('landscape');
+        }
+      };
+      img.onerror = () => {
+        setAspectRatio('landscape');
+      };
+    }
+  }, [video]);
 
   // Autoplay next effect when video ends
   const handleVideoEnded = () => {
@@ -137,45 +156,17 @@ const VideoPlayerPage = () => {
 
   const renderActivePlayer = (source) => {
     if (source.type === 'drive') {
-      if (isMobileDevice) {
-        // Google Drive on mobile cannot support full native controls or fullscreen inside standard iframes
-        // Open the preview page in a new tab instead to guarantee first-party access and full native controls
-        return (
-          <div
-            onClick={() => window.open(source.fallbackUrl || video.videoUrl, '_blank')}
-            className="absolute inset-0 w-full h-full cursor-pointer group overflow-hidden select-none bg-black"
-          >
-            <img
-              src={video.thumbnail}
-              alt={video.title}
-              className="absolute inset-0 w-full h-full object-cover filter brightness-[0.6] transition-transform duration-700 ease-out group-hover:scale-105"
-              loading="eager"
-            />
-            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/45 transition-colors duration-400" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
-              <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-all duration-300 shadow-2xl flex items-center justify-center">
-                <Play className="w-8 h-8 fill-black text-black ml-1" />
-              </div>
-              <span className="text-[10px] uppercase tracking-[0.2em] bg-black/70 border border-white/10 px-5 py-2 rounded-full font-bold text-neutral-300 text-center mx-4">
-                Open in Google Drive
-              </span>
-            </div>
-          </div>
-        );
-      } else {
-        // Desktop iframe embed is safe and allows fullscreen
-        return (
-          <iframe
-            src={source.embedUrl}
-            title={video.title}
-            className="absolute inset-0 w-full h-full border-none bg-black"
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            allowFullScreen
-            webkitallowfullscreen="true"
-            mozallowfullscreen="true"
-          />
-        );
-      }
+      return (
+        <iframe
+          src={source.embedUrl}
+          title={video.title}
+          className="absolute inset-0 w-full h-full border-none bg-black"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          webkitallowfullscreen="true"
+          mozallowfullscreen="true"
+        />
+      );
     }
 
     if (source.type === 'youtube') {
@@ -275,21 +266,18 @@ const VideoPlayerPage = () => {
             ref={playerWrapperRef}
             onMouseEnter={() => setPlayerHovered(true)}
             onMouseLeave={() => setPlayerHovered(false)}
-            className="video-player-container relative w-full aspect-video max-h-[75vh] sm:max-h-[80vh] lg:max-h-none rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl"
+            className={`video-player-container relative w-full mx-auto rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl transition-all duration-500 ${
+              aspectRatio === 'portrait'
+                ? 'max-w-[340px] aspect-[9/16] max-h-[75vh] sm:max-h-[80vh] lg:max-h-[85vh]'
+                : 'max-w-full aspect-video max-h-[75vh] sm:max-h-[80vh] lg:max-h-none'
+            }`}
           >
             {playbackStarted ? (
               renderActivePlayer(source)
             ) : (
               // Lazy load poster layout
               <div
-                onClick={() => {
-                  if (source.type === 'drive' && isMobileDevice) {
-                    // Open in new tab immediately to bypass mobile iframe issues
-                    window.open(source.fallbackUrl || video.videoUrl, '_blank');
-                  } else {
-                    setPlaybackStarted(true);
-                  }
-                }}
+                onClick={() => setPlaybackStarted(true)}
                 className="absolute inset-0 w-full h-full cursor-pointer group overflow-hidden select-none"
               >
                 <img
