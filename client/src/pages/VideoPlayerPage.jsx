@@ -162,6 +162,17 @@ const VideoPlayerPage = () => {
         style={{ objectFit: 'cover' }}
         onEnded={handleVideoEnded}
         onLoadedMetadata={handleLoadedMetadata}
+        onError={(e) => {
+          if (source.type === 'drive-direct' && videoRef.current) {
+            // Fallback to iframe if direct stream fails due to file size limits
+            const iframe = document.createElement('iframe');
+            iframe.src = source.embedUrl;
+            iframe.className = "absolute inset-0 w-full h-full border-none bg-black";
+            iframe.allow = "autoplay; fullscreen; encrypted-media; picture-in-picture";
+            iframe.allowFullscreen = true;
+            videoRef.current.parentNode.replaceChild(iframe, videoRef.current);
+          }
+        }}
       />
     );
   };
