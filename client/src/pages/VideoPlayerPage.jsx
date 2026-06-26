@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2, Eye, Calendar, Clock, Check, Play } from 'lucide-react';
+import { ArrowLeft, Share2, Eye, Calendar, Clock, Check } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
@@ -11,42 +11,14 @@ const VideoPlayerPage = () => {
   const [video, setVideo] = useState(null);
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // Player Playback & UI States
   const [copied, setCopied] = useState(false);
-  const [playerHovered, setPlayerHovered] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState('landscape'); // 'landscape' or 'portrait'
+  const [ratio, setRatio] = useState(16 / 9); // default numerical aspect ratio
   
-  const playerWrapperRef = useRef(null);
   const videoRef = useRef(null);
-
-  // Detect mobile and touch capability on mount
-  useEffect(() => {
-    const checkMobile = () => {
-      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      setIsMobileDevice(isTouch || isMobileUA);
-    };
-    checkMobile();
-  }, []);
-
-  useEffect(() => {
-    if (playerHovered) {
-      document.body.classList.add('hide-custom-cursor');
-    } else {
-      document.body.classList.remove('hide-custom-cursor');
-    }
-    return () => {
-      document.body.classList.remove('hide-custom-cursor');
-    };
-  }, [playerHovered]);
 
   useEffect(() => {
     const fetchVideoDetails = async () => {
       setLoading(true);
-      setPlaying(false); // Reset playing state for new video view
       try {
         const res = await API.get(`/videos/${id}`);
         if (res.data.success) {
@@ -63,20 +35,18 @@ const VideoPlayerPage = () => {
     fetchVideoDetails();
   }, [id]);
 
-  // Determine video aspect ratio dynamically based on thumbnail dimensions
+  // Determine video aspect ratio dynamically based on thumbnail dimensions as first pass / fallback
   useEffect(() => {
     if (video && video.thumbnail) {
       const img = new Image();
       img.src = resolveMediaUrl(video.thumbnail);
       img.onload = () => {
-        if (img.width < img.height) {
-          setAspectRatio('portrait');
-        } else {
-          setAspectRatio('landscape');
+        if (img.width && img.height) {
+          setRatio(img.width / img.height);
         }
       };
       img.onerror = () => {
-        setAspectRatio('landscape');
+        setRatio(16 / 9);
       };
     }
   }, [video]);
@@ -94,28 +64,10 @@ const VideoPlayerPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handlePlayClick = (e) => {
-    e.stopPropagation();
-    if (videoRef.current) {
-      videoRef.current.play()
-        .then(() => {
-          setPlaying(true);
-        })
-        .catch((err) => {
-          console.warn("Programmatic play failed. User must use native controls.", err);
-          setPlaying(true);
-        });
-    }
-  };
-
   const handleLoadedMetadata = (e) => {
     const { videoWidth, videoHeight } = e.target;
     if (videoWidth && videoHeight) {
-      if (videoWidth < videoHeight) {
-        setAspectRatio('portrait');
-      } else {
-        setAspectRatio('landscape');
-      }
+      setRatio(videoWidth / videoHeight);
     }
   };
 
@@ -138,7 +90,6 @@ const VideoPlayerPage = () => {
           type: 'drive',
           fileId,
           embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
-          fallbackUrl: `https://drive.google.com/file/d/${fileId}/preview` // Force preview link format for native mobile player
         };
       }
     }
@@ -195,33 +146,19 @@ const VideoPlayerPage = () => {
       );
     }
 
-    // Direct Native Video playback (R2/MP4/etc.)
+    // Direct Native Video playback (R2/MP4/etc.) with clean native controls
     return (
-      <div className="relative w-full h-full">
-        <video
-          ref={videoRef}
-          src={resolveMediaUrl(source.url)}
-          poster={resolveMediaUrl(video.thumbnail)}
-          controls
-          playsInline
-          webkit-playsinline="true"
-          className="absolute inset-0 w-full h-full object-contain bg-black"
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={handleVideoEnded}
-          onLoadedMetadata={handleLoadedMetadata}
-        />
-        {!playing && !isMobileDevice && (
-          <div
-            onClick={handlePlayClick}
-            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center cursor-pointer z-20 group transition-all duration-300"
-          >
-            <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-all duration-400 shadow-2xl flex items-center justify-center">
-              <Play className="w-8 h-8 fill-black text-black ml-1" />
-            </div>
-          </div>
-        )}
-      </div>
+      <video
+        ref={videoRef}
+        src={resolveMediaUrl(source.url)}
+        poster={resolveMediaUrl(video.thumbnail)}
+        controls
+        playsInline
+        webkit-playsinline="true"
+        className="absolute inset-0 w-full h-full object-contain bg-black"
+        onEnded={handleVideoEnded}
+        onLoadedMetadata={handleLoadedMetadata}
+      />
     );
   };
 
@@ -241,6 +178,7 @@ const VideoPlayerPage = () => {
   }
 
   const source = getVideoSource(resolveMediaUrl(video.videoUrl));
+  const isPortrait = ratio < 1;
 
   return (
     <div className="relative min-h-screen bg-[#0A0A0A] text-white pt-24 pb-16 px-6 md:px-12 overflow-hidden select-none">
@@ -276,38 +214,15 @@ const VideoPlayerPage = () => {
         {/* Responsive Aspect-Ratio Video Container */}
         <div className="w-full max-w-full mx-auto">
           <div
-            ref={playerWrapperRef}
-            onMouseEnter={() => setPlayerHovered(true)}
-            onMouseLeave={() => setPlayerHovered(false)}
             className={`video-player-container relative w-full mx-auto rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl transition-all duration-500 ${
-              aspectRatio === 'portrait'
-                ? 'max-w-[340px] aspect-[9/16] max-h-[75vh] sm:max-h-[80vh] lg:max-h-[85vh]'
-                : 'max-w-full aspect-video max-h-[75vh] sm:max-h-[80vh] lg:max-h-none'
+              isPortrait
+                ? 'max-w-[420px]'
+                : 'max-w-full'
             }`}
+            style={{ aspectRatio: ratio }}
           >
             {renderActivePlayer(source)}
           </div>
-          
-          {/* Prominent "Open Video" Button for Google Drive videos */}
-          {source.type === 'drive' && (
-            <div className="flex flex-col items-center pt-6 space-y-3">
-              <a
-                href={source.fallbackUrl || resolveMediaUrl(video.videoUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center space-x-2.5 text-xs uppercase tracking-[0.2em] bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-2xl w-full sm:w-auto text-center"
-                id="open-drive-video-btn"
-              >
-                <span>Open Video</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-              </a>
-              {isMobileDevice && (
-                <p className="text-[10px] text-neutral-500 font-light text-center leading-relaxed max-w-sm px-4">
-                  Google Drive video will open directly in a new tab for native mobile controls and full screen compatibility.
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Video Information Row */}
