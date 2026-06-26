@@ -16,10 +16,21 @@ const VideoPlayerPage = () => {
   // Custom Controls State
   const [copied, setCopied] = useState(false);
   const [playerHovered, setPlayerHovered] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  
   const [playing, setPlaying] = useState(() => {
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     return !isTouchDevice;
   });
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsMobileDevice(isTouch || isMobileUA);
+    };
+    checkMobile();
+  }, []);
   
   const playerWrapperRef = useRef(null);
 
@@ -118,7 +129,7 @@ const VideoPlayerPage = () => {
         style={{ backgroundImage: `url(${video.thumbnail})` }}
       />
 
-      <div className="relative z-10 max-w-5xl mx-auto space-y-8">
+      <div className="relative z-10 max-w-[1200px] mx-auto space-y-8">
         
         {/* Back and Share buttons */}
         <div className="flex items-center justify-between">
@@ -157,27 +168,43 @@ const VideoPlayerPage = () => {
             />
           ) : (
             <div className="relative w-full h-full">
-              <ReactPlayer
-                url={video.videoUrl}
-                playing={playing}
-                muted={false}
-                controls={true}
-                width="100%"
-                height="100%"
-                onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
-                onEnded={handleVideoEnded}
-                className="absolute inset-0 w-full h-full"
-              />
-              {!playing && (
-                <div
-                  onClick={() => setPlaying(true)}
-                  className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center cursor-pointer z-20 group transition-all duration-300"
-                >
-                  <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-transform duration-300 shadow-2xl flex items-center justify-center">
-                    <Play className="w-6 h-6 fill-black text-black ml-0.5" />
-                  </div>
-                </div>
+              {isMobileDevice ? (
+                <video
+                  src={video.videoUrl}
+                  poster={video.thumbnail}
+                  controls
+                  playsInline
+                  webkit-playsinline="true"
+                  className="absolute inset-0 w-full h-full object-contain bg-black"
+                  onPlay={() => setPlaying(true)}
+                  onPause={() => setPlaying(false)}
+                  onEnded={handleVideoEnded}
+                />
+              ) : (
+                <>
+                  <ReactPlayer
+                    url={video.videoUrl}
+                    playing={playing}
+                    muted={false}
+                    controls={true}
+                    width="100%"
+                    height="100%"
+                    onPlay={() => setPlaying(true)}
+                    onPause={() => setPlaying(false)}
+                    onEnded={handleVideoEnded}
+                    className="absolute inset-0 w-full h-full"
+                  />
+                  {!playing && (
+                    <div
+                      onClick={() => setPlaying(true)}
+                      className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center cursor-pointer z-20 group transition-all duration-300"
+                    >
+                      <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-transform duration-300 shadow-2xl flex items-center justify-center">
+                        <Play className="w-6 h-6 fill-black text-black ml-0.5" />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
