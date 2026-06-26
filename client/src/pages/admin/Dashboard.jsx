@@ -326,6 +326,23 @@ const Dashboard = () => {
     }
   };
 
+  // Detect aspect ratio from a thumbnail image URL
+  const detectImageAspectRatio = (imageUrl) => {
+    return new Promise((resolve) => {
+      if (!imageUrl) { resolve(null); return; }
+      const img = new Image();
+      img.onload = () => {
+        if (img.naturalWidth && img.naturalHeight) {
+          resolve(img.naturalWidth / img.naturalHeight);
+        } else {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = imageUrl;
+    });
+  };
+
   const openAddVideo = () => {
     setVidTitle('');
     setVidCategory('');
@@ -375,6 +392,16 @@ const Dashboard = () => {
         videoUrl: vidVideoUrl.trim(),
         thumbnail: resolvedThumbnail,
       };
+
+      // Detect and store the aspect ratio from the thumbnail
+      try {
+        const detectedRatio = await detectImageAspectRatio(resolvedThumbnail);
+        if (detectedRatio) {
+          payload.aspectRatio = Math.round(detectedRatio * 10000) / 10000;
+        }
+      } catch (e) {
+        console.warn('Aspect ratio detection failed:', e.message);
+      }
 
       if (vidModal.mode === 'edit') {
         const editingId = vidModal.data?._id;

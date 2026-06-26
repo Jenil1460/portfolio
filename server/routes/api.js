@@ -1,4 +1,7 @@
 const express = require('express');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 const router = express.Router();
 
 // Middlewares
@@ -76,6 +79,88 @@ router.get('/categories', categoryController.getCategories);
 router.post('/categories', protect, categoryController.createCategory);
 router.put('/categories/:id', protect, categoryController.updateCategory);
 router.delete('/categories/:id', protect, categoryController.deleteCategory);
+
+// --- DRIVE PROXY ROUTING ---
+const fetchDriveStream = (targetUrl, rangeHeader) => {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(targetUrl);
+    const requestOptions = {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': '*/*',
+      },
+    };
+
+    if (rangeHeader) {
+      requestOptions.headers.Range = rangeHeader;
+    }
+
+    const client = parsedUrl.protocol === 'https:' ? https : http;
+    const request = client.request(parsedUrl, requestOptions, (response) => {
+      resolve(response);
+    });
+
+    request.on('error', reject);
+    request.end();
+  });
+};
+
+router.get('/drive/:fileId', async (req, res) => {
+  try {
+    const fileId = req.params.fileId;
+    if (!fileId) {
+      return res.status(400).json({ success: false, message: 'Missing Drive file ID' });
+    }
+
+    let driveUrl = `https://drive.google.com/uc?export=media&id=${fileId}`;
+    let response;
+    for (let redirectCount = 0; redirectCount < 5; redirectCount += 1) {
+      response = await fetchDriveStream(driveUrl, req.headers.range);
+      if ([301, 302, 303, 307, 308].includes(response.statusCode) && response.headers.location) {
+        driveUrl = response.headers.location;
+        response.destroy();
+        continue;
+      }
+      break;
+    }
+
+    if (!response) {
+      return res.status(502).json({ success: false, message: 'Unable to proxy Drive video' });
+    }
+
+    const statusCode = response.statusCode >= 400 ? response.statusCode : response.statusCode;
+    const headersToCopy = [
+      'content-type',
+      'content-length',
+      'content-range',
+      'accept-ranges',
+      'cache-control',
+      'etag',
+      'last-modified',
+    ];
+
+    headersToCopy.forEach((name) => {
+      if (response.headers[name]) {
+        res.setHeader(name, response.headers[name]);
+      }
+    });
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.status(statusCode);
+
+    if (statusCode >= 400) {
+      response.pipe(res);
+      return;
+    }
+
+    response.pipe(res);
+  } catch (error) {
+    console.error('Drive proxy error:', error);
+    res.status(500).json({ success: false, message: 'Drive proxy failed' });
+  }
+});
 
 // --- VIDEO ROUTING ---
 router.get('/videos', videoController.getVideos);

@@ -1,38 +1,46 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2, Eye, Calendar, Clock, Check } from 'lucide-react';
+import { ArrowLeft, Share2, Eye, Calendar, Clock, Check, Play, ExternalLink } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Parse any video URL into its type + embed/src URLs
+// Device detection
+// ─────────────────────────────────────────────────────────────────────────────
+const isMobile = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parse video URL → { type, fileId?, embedUrl?, src? }
 // ─────────────────────────────────────────────────────────────────────────────
 const parseVideoSource = (rawUrl) => {
-  if (!rawUrl) return { type: 'unknown', src: '' };
+  if (!rawUrl || typeof rawUrl !== 'string') return { type: 'unknown', src: '' };
 
-  if (rawUrl.includes('drive.google.com') || rawUrl.includes('docs.google.com')) {
-    let fileId = '';
-    const m1 = rawUrl.match(/\/file\/d\/([^/?#&]+)/);
-    const m2 = rawUrl.match(/[?&]id=([^&]+)/);
-    if (m1) fileId = m1[1];
-    else if (m2) fileId = m2[1];
+  const normalized = rawUrl.trim();
+
+  const driveMatch = normalized.match(/\/file\/d\/([^/?#&]+)/) || normalized.match(/[?&]id=([^&]+)/);
+  if (driveMatch) {
+    const fileId = driveMatch[1];
     if (fileId) {
       return {
         type: 'drive',
         fileId,
         embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+        viewUrl: `https://drive.google.com/file/d/${fileId}/view`,
       };
     }
   }
 
-  if (rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be')) {
-    let vid = '';
-    const m1 = rawUrl.match(/[?&]v=([^&]+)/);
-    const m2 = rawUrl.match(/youtu\.be\/([^?#]+)/);
-    const m3 = rawUrl.match(/embed\/([^?#]+)/);
-    if (m1) vid = m1[1];
-    else if (m2) vid = m2[1];
-    else if (m3) vid = m3[1];
+  const youTubeMatch =
+    normalized.match(/[?&]v=([^&]+)/) ||
+    normalized.match(/youtu\.be\/([^?#]+)/) ||
+    normalized.match(/embed\/([^?#]+)/);
+  if (youTubeMatch) {
+    const vid = youTubeMatch[1];
     if (vid) {
       return {
         type: 'youtube',
@@ -41,41 +49,30 @@ const parseVideoSource = (rawUrl) => {
     }
   }
 
-  if (rawUrl.includes('vimeo.com')) {
-    const m = rawUrl.match(/(?:video\/|vimeo\.com\/)(\d+)/);
-    if (m) {
-      return {
-        type: 'vimeo',
-        embedUrl: `https://player.vimeo.com/video/${m[1]}?autoplay=1&playsinline=1`,
-      };
-    }
+  const vimeoMatch = normalized.match(/(?:video\/|vimeo\.com\/)(\d+)/);
+  if (vimeoMatch) {
+    return {
+      type: 'vimeo',
+      embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1&playsinline=1`,
+    };
   }
 
-  return { type: 'direct', src: rawUrl };
+  return { type: 'direct', src: normalized };
 };
 
+const resolveDriveThumbnailUrl = (fileId) => `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+const resolveDriveVideoUrl = (fileId) => `https://docs.google.com/uc?export=media&id=${fileId}`;
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Detect aspect ratio reliably from the thumbnail image.
-//
-// WHY thumbnail instead of a hidden <video> probe?
-//   - Google Drive blocks the direct download URL with a virus-scan HTML page.
-//     A hidden <video> element pointed at that URL never fires onloadedmetadata,
-//     so videoWidth / videoHeight stay at 0 and everything defaults to 16:9.
-//   - The thumbnail is a normal image: CORS-friendly, loads fast, always works.
-//   - Admin-uploaded thumbnails match the video orientation (portrait thumb →
-//     portrait video). This is the same technique YouTube and Vimeo use for
-//     pre-load layout reservation.
-//
-// For direct MP4 / R2 we ALSO read the real metadata inside NativePlayer via
-// onLoadedMetadata, and update the ratio with the precise pixel dimensions.
+// Hook: detect aspect ratio from an image URL
 // ─────────────────────────────────────────────────────────────────────────────
-const useThumbnailRatio = (thumbnailUrl) => {
-  const [ratio, setRatio] = useState(null); // null = loading
+const useImageRatio = (imageUrl) => {
+  const [ratio, setRatio] = useState(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!thumbnailUrl) {
-      setRatio(16 / 9);
+    if (!imageUrl) {
+      setRatio(null);
       setReady(true);
       return;
     }
@@ -89,95 +86,101 @@ const useThumbnailRatio = (thumbnailUrl) => {
       if (img.naturalWidth && img.naturalHeight) {
         setRatio(img.naturalWidth / img.naturalHeight);
       } else {
-        setRatio(16 / 9);
+        setRatio(null);
       }
       setReady(true);
     };
 
     img.onerror = () => {
-      // If thumbnail fails to load, default to 16:9
-      setRatio(16 / 9);
+      setRatio(null);
       setReady(true);
     };
 
-    // Do NOT set crossOrigin — we only need naturalWidth/naturalHeight (no canvas
-    // access needed), and setting it to 'anonymous' causes Google Drive thumbnail
-    // URLs to fail with a CORS error since Drive doesn't send CORS headers.
-    img.src = thumbnailUrl;
+    img.src = imageUrl;
 
     return () => {
       img.onload = null;
       img.onerror = null;
       img.src = '';
     };
-  }, [thumbnailUrl]);
+  }, [imageUrl]);
 
   return { ratio, ready };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Layout helper — translates ratio number into container CSS
+// Layout helper
 // ─────────────────────────────────────────────────────────────────────────────
 const getLayout = (ratio) => {
-  const isPortrait = ratio < 0.99;
-  const isSquare   = ratio >= 0.99 && ratio <= 1.01;
+  const isPortrait = ratio && ratio < 1;
+  const maxWidth = isPortrait ? 420 : '100%';
 
   return {
-    outerClass: [
-      'mx-auto w-full',
-      isPortrait ? 'max-w-[420px]' : isSquare ? 'max-w-[500px]' : 'max-w-full',
-    ].join(' '),
-    containerStyle: { aspectRatio: String(ratio) },
+    outerClass: 'mx-auto w-full',
+    containerStyle: {
+      width: '100%',
+      maxWidth,
+      aspectRatio: ratio ? String(ratio) : '16/9',
+    },
   };
 };
 
+// Spinner shown while ratio is being detected
+const LoadingShell = () => (
+  <div className="mx-auto w-full max-w-full">
+    <div
+      className="relative rounded-[16px] bg-neutral-900 border border-white/5 shadow-2xl flex items-center justify-center"
+      style={{ aspectRatio: '16/9' }}
+    >
+      <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+    </div>
+  </div>
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
-// NativePlayer — for direct MP4 / Cloudflare R2
-// Uses thumbnail for initial layout, then refines with real video metadata.
+// NativePlayer — direct MP4 / Cloudflare R2
 // ─────────────────────────────────────────────────────────────────────────────
-const NativePlayer = ({ src, poster, thumbnailUrl, onEnded }) => {
-  const { ratio: thumbRatio, ready } = useThumbnailRatio(thumbnailUrl);
-  // Start with thumbnail ratio, then override with precise video dimensions
+const NativePlayer = ({ src, poster, onEnded }) => {
   const [ratio, setRatio] = useState(null);
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
 
-  // Once thumbnail loads, seed the ratio
   useEffect(() => {
-    if (ready && thumbRatio) setRatio(thumbRatio);
-  }, [ready, thumbRatio]);
+    setRatio(null);
+    setMetadataLoaded(false);
+  }, [src]);
 
-  const onMetadata = useCallback((e) => {
-    const { videoWidth: w, videoHeight: h } = e.currentTarget;
-    if (w && h) setRatio(w / h); // precise override
+  const onLoadedMetadata = useCallback((event) => {
+    const { videoWidth: w, videoHeight: h } = event.currentTarget;
+    if (w && h) {
+      setRatio(w / h);
+    }
+    setMetadataLoaded(true);
   }, []);
-
-  if (!ratio) {
-    return (
-      <div className="mx-auto w-full max-w-full">
-        <div className="relative rounded-[16px] bg-neutral-900 border border-white/5 shadow-2xl flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
-          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-        </div>
-      </div>
-    );
-  }
 
   const { outerClass, containerStyle } = getLayout(ratio);
 
   return (
-    <div className={outerClass}>
+    <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
       <div
-        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl"
+        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
         style={containerStyle}
       >
+        {!metadataLoaded && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
+
         <video
           src={src}
           poster={poster}
           controls
           playsInline
           preload="metadata"
-          onLoadedMetadata={onMetadata}
+          onLoadedMetadata={onLoadedMetadata}
           onEnded={onEnded}
           className="absolute inset-0 w-full h-full"
-          style={{ objectFit: 'contain', background: '#000' }}
+          style={{ objectFit: 'contain', background: '#000', opacity: metadataLoaded ? 1 : 0 }}
           webkit-playsinline="true"
           x-webkit-airplay="allow"
         />
@@ -187,45 +190,81 @@ const NativePlayer = ({ src, poster, thumbnailUrl, onEnded }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DrivePlayer — Google Drive iframe
-// Ratio comes from thumbnail. Only ONE player element in DOM.
+// DrivePlayer
+//
+// DESKTOP: Renders the Drive /preview iframe inside a correctly-sized container.
+//
+// MOBILE:  The Drive /preview iframe is terrible on mobile (overlapping controls,
+//          duplicate play buttons, broken seek bar — as seen in screenshots).
+//          Instead we show a clean poster thumbnail with a styled play button.
+//          Tapping opens the Drive file in a new tab where the user gets native
+//          mobile video playback with proper controls and fullscreen support.
+//
+// RATIO:   Always uses `https://drive.google.com/thumbnail?id={fileId}&sz=w800`
+//          for ratio detection, NOT the thumbnail stored in the database.
+//          Google's thumbnail API preserves the real video dimensions, so a 9:16
+//          video returns a 9:16 thumbnail. This fixes the problem where the
+//          admin-uploaded thumbnail might be landscape for a portrait video.
 // ─────────────────────────────────────────────────────────────────────────────
-const DrivePlayer = ({ source, thumbnailUrl, onEnded }) => {
-  const { ratio, ready } = useThumbnailRatio(thumbnailUrl);
+const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
+  const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
+  const videoUrl = resolveDriveVideoUrl(source.fileId);
+  const { ratio, ready } = useImageRatio(driveThumbnailUrl);
+  const posterUrl = storedThumbnail || driveThumbnailUrl;
+  const [useIframe, setUseIframe] = useState(false);
 
-  if (!ready) {
+  if (!ready) return <LoadingShell />;
+
+  const { outerClass, containerStyle } = getLayout(ratio);
+
+  if (useIframe) {
     return (
-      <div className="mx-auto w-full max-w-full">
-        <div className="relative rounded-[16px] bg-neutral-900 border border-white/5 shadow-2xl flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
-          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+      <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
+        <div
+          className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
+          style={containerStyle}
+        >
+          <iframe
+            src={source.embedUrl}
+            title="Drive Video Player"
+            className="absolute inset-0 w-full h-full border-0"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            webkitallowfullscreen="true"
+            mozallowfullscreen="true"
+          />
         </div>
       </div>
     );
   }
 
-  const { outerClass, containerStyle } = getLayout(ratio);
-
   return (
-    <div className={outerClass}>
+    <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
       <div
-        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl"
+        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
         style={containerStyle}
       >
-        <iframe
-          src={source.embedUrl}
-          title="Video Player"
-          className="absolute inset-0 w-full h-full border-0"
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          allowFullScreen
-          webkitallowfullscreen="true"
-          mozallowfullscreen="true"
-          loading="lazy"
+        <video
+          src={videoUrl}
+          poster={posterUrl}
+          controls
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={() => {}}
+          onEnded={onEnded}
+          onError={() => setUseIframe(true)}
+          className="absolute inset-0 w-full h-full"
+          style={{ objectFit: 'contain', background: '#000' }}
+          webkit-playsinline="true"
+          x-webkit-airplay="allow"
         />
       </div>
+      <p className="text-[10px] uppercase tracking-widest text-neutral-400 text-center mt-3">
+        Native Drive playback in page with mobile controls enabled.
+      </p>
     </div>
   );
 };
-
 // ─────────────────────────────────────────────────────────────────────────────
 // IframePlayer — YouTube / Vimeo (always 16:9)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,36 +280,31 @@ const IframePlayer = ({ embedUrl }) => (
         className="absolute inset-0 w-full h-full border-0"
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
         allowFullScreen
-        loading="lazy"
       />
     </div>
   </div>
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Top-level dispatcher — picks correct player.
-// Parent MUST key this with video._id to force full unmount between videos.
+// Top-level dispatcher — key with video._id in parent for clean unmount
 // ─────────────────────────────────────────────────────────────────────────────
 const UniversalVideoPlayer = ({ video, onEnded }) => {
-  const resolved     = resolveMediaUrl(video.videoUrl);
-  const source       = parseVideoSource(resolved);
-  const thumbnailUrl = resolveMediaUrl(video.thumbnail);
-  const poster       = thumbnailUrl;
+  const resolved = resolveMediaUrl(video.videoUrl);
+  const source = parseVideoSource(resolved);
+  const storedThumbnail = resolveMediaUrl(video.thumbnail);
 
   if (source.type === 'drive') {
-    return <DrivePlayer source={source} thumbnailUrl={thumbnailUrl} onEnded={onEnded} />;
+    return <DrivePlayer source={source} storedThumbnail={storedThumbnail} onEnded={onEnded} />;
   }
 
   if (source.type === 'youtube' || source.type === 'vimeo') {
     return <IframePlayer embedUrl={source.embedUrl} />;
   }
 
-  // direct / R2 / MP4
   return (
     <NativePlayer
       src={resolveMediaUrl(source.src)}
-      poster={poster}
-      thumbnailUrl={thumbnailUrl}
+      poster={storedThumbnail}
       onEnded={onEnded}
     />
   );
@@ -280,13 +314,13 @@ const UniversalVideoPlayer = ({ video, onEnded }) => {
 // Page component
 // ─────────────────────────────────────────────────────────────────────────────
 const VideoPlayerPage = () => {
-  const { id }     = useParams();
-  const navigate   = useNavigate();
+  const { id } = useParams();
+  const navigate = useNavigate();
 
-  const [video,   setVideo]   = useState(null);
+  const [video, setVideo] = useState(null);
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [copied,  setCopied]  = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,7 +341,9 @@ const VideoPlayerPage = () => {
       }
     };
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const handleEnded = () => {
@@ -325,8 +361,13 @@ const VideoPlayerPage = () => {
   if (!video) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-6 px-6">
-        <p className="text-xs text-neutral-400 font-light">Cinematic video clip was not found.</p>
-        <Link to="/" className="text-[10px] uppercase tracking-widest bg-white text-black px-6 py-3 rounded-full font-bold">
+        <p className="text-xs text-neutral-400 font-light">
+          Cinematic video clip was not found.
+        </p>
+        <Link
+          to="/"
+          className="text-[10px] uppercase tracking-widest bg-white text-black px-6 py-3 rounded-full font-bold"
+        >
           Back to Work
         </Link>
       </div>
@@ -335,8 +376,7 @@ const VideoPlayerPage = () => {
 
   return (
     <div className="relative min-h-screen bg-[#0A0A0A] text-white pt-12 pb-16 px-4 md:px-8 overflow-hidden">
-
-      {/* Ambient blurred backdrop from thumbnail */}
+      {/* Ambient backdrop */}
       <div
         className="absolute inset-0 pointer-events-none z-0"
         style={{
@@ -350,7 +390,6 @@ const VideoPlayerPage = () => {
       />
 
       <div className="relative z-10 max-w-[1100px] mx-auto space-y-6">
-
         {/* Top bar */}
         <div className="flex items-center justify-between pt-4">
           <Link
@@ -366,12 +405,16 @@ const VideoPlayerPage = () => {
             className="flex items-center space-x-2 text-[10px] uppercase tracking-widest text-neutral-400 hover:text-white transition-colors border border-white/5 bg-[#171717] px-4 py-2 rounded-full"
             id="share-frame-btn"
           >
-            {copied ? <Check className="w-3 h-3 text-green-400" /> : <Share2 className="w-3 h-3" />}
+            {copied ? (
+              <Check className="w-3 h-3 text-green-400" />
+            ) : (
+              <Share2 className="w-3 h-3" />
+            )}
             <span>{copied ? 'Copied' : 'Share'}</span>
           </button>
         </div>
 
-        {/* Player — keyed by id so it fully unmounts between videos */}
+        {/* Player */}
         <UniversalVideoPlayer
           key={video._id}
           video={video}
@@ -380,7 +423,6 @@ const VideoPlayerPage = () => {
 
         {/* Info grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-4">
-
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center space-x-3 text-[9px] uppercase tracking-widest text-neutral-500">
               {video.category?.name && (
@@ -437,7 +479,9 @@ const VideoPlayerPage = () => {
         {/* Related videos */}
         {related.length > 0 && (
           <div className="pt-12 border-t border-white/5 space-y-6">
-            <h3 className="text-sm uppercase tracking-wider font-extrabold">Related Visuals</h3>
+            <h3 className="text-sm uppercase tracking-wider font-extrabold">
+              Related Visuals
+            </h3>
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {related.map((item) => (
                 <Link
@@ -467,7 +511,6 @@ const VideoPlayerPage = () => {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
