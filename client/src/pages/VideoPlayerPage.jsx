@@ -16,8 +16,19 @@ const VideoPlayerPage = () => {
   const [copied, setCopied] = useState(false);
   const [playerHovered, setPlayerHovered] = useState(false);
   const [playbackStarted, setPlaybackStarted] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
   
   const playerWrapperRef = useRef(null);
+
+  // Detect mobile and touch capability on mount
+  useEffect(() => {
+    const checkMobile = () => {
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsMobileDevice(isTouch || isMobileUA);
+    };
+    checkMobile();
+  }, []);
 
   useEffect(() => {
     if (playerHovered) {
@@ -63,7 +74,7 @@ const VideoPlayerPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Helper to parse different video URL sources and construct their respective player configuration details
+  // Helper to parse different video URL sources and construct their respective player configurations
   const getVideoSource = (url) => {
     if (!url) return { type: 'unknown', url: '' };
 
@@ -82,7 +93,7 @@ const VideoPlayerPage = () => {
           type: 'drive',
           fileId,
           embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
-          fallbackUrl: `https://drive.google.com/file/d/${fileId}/view`
+          fallbackUrl: `https://drive.google.com/file/d/${fileId}/preview` // Force preview link format for native mobile player
         };
       }
     }
@@ -120,23 +131,51 @@ const VideoPlayerPage = () => {
       }
     }
 
-    // Default to direct HTML5 video (MP4/WebM/etc.)
+    // Default to direct HTML5 video (MP4/WebM/R2 streams)
     return { type: 'direct', url };
   };
 
   const renderActivePlayer = (source) => {
     if (source.type === 'drive') {
-      return (
-        <iframe
-          src={source.embedUrl}
-          title={video.title}
-          className="absolute inset-0 w-full h-full border-none bg-black"
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          allowFullScreen
-          webkitallowfullscreen="true"
-          mozallowfullscreen="true"
-        />
-      );
+      if (isMobileDevice) {
+        // Google Drive on mobile cannot support full native controls or fullscreen inside standard iframes
+        // Open the preview page in a new tab instead to guarantee first-party access and full native controls
+        return (
+          <div
+            onClick={() => window.open(source.fallbackUrl || video.videoUrl, '_blank')}
+            className="absolute inset-0 w-full h-full cursor-pointer group overflow-hidden select-none bg-black"
+          >
+            <img
+              src={video.thumbnail}
+              alt={video.title}
+              className="absolute inset-0 w-full h-full object-cover filter brightness-[0.6] transition-transform duration-700 ease-out group-hover:scale-105"
+              loading="eager"
+            />
+            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/45 transition-colors duration-400" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
+              <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-all duration-300 shadow-2xl flex items-center justify-center">
+                <Play className="w-8 h-8 fill-black text-black ml-1" />
+              </div>
+              <span className="text-[10px] uppercase tracking-[0.2em] bg-black/70 border border-white/10 px-5 py-2 rounded-full font-bold text-neutral-300 text-center mx-4">
+                Open in Google Drive
+              </span>
+            </div>
+          </div>
+        );
+      } else {
+        // Desktop iframe embed is safe and allows fullscreen
+        return (
+          <iframe
+            src={source.embedUrl}
+            title={video.title}
+            className="absolute inset-0 w-full h-full border-none bg-black"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            webkitallowfullscreen="true"
+            mozallowfullscreen="true"
+          />
+        );
+      }
     }
 
     if (source.type === 'youtube') {
@@ -167,7 +206,7 @@ const VideoPlayerPage = () => {
       );
     }
 
-    // Direct Native Video playback
+    // Direct Native Video playback (R2/MP4/etc.)
     return (
       <video
         src={source.url}
@@ -243,7 +282,14 @@ const VideoPlayerPage = () => {
             ) : (
               // Lazy load poster layout
               <div
-                onClick={() => setPlaybackStarted(true)}
+                onClick={() => {
+                  if (source.type === 'drive' && isMobileDevice) {
+                    // Open in new tab immediately to bypass mobile iframe issues
+                    window.open(source.fallbackUrl || video.videoUrl, '_blank');
+                  } else {
+                    setPlaybackStarted(true);
+                  }
+                }}
                 className="absolute inset-0 w-full h-full cursor-pointer group overflow-hidden select-none"
               >
                 <img
@@ -262,18 +308,24 @@ const VideoPlayerPage = () => {
             )}
           </div>
           
-          {/* Fallback open button for Google Drive view limits */}
+          {/* Prominent "Open Video" Button for Google Drive videos */}
           {source.type === 'drive' && (
-            <div className="flex justify-center pt-5">
+            <div className="flex flex-col items-center pt-6 space-y-3">
               <a
                 href={source.fallbackUrl || video.videoUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center space-x-2 text-[10px] uppercase tracking-widest bg-white hover:bg-neutral-200 text-black px-6 py-3 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-lg"
+                className="inline-flex items-center justify-center space-x-2.5 text-xs uppercase tracking-[0.2em] bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-2xl w-full sm:w-auto text-center"
+                id="open-drive-video-btn"
               >
                 <span>Open Video</span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
               </a>
+              {isMobileDevice && (
+                <p className="text-[10px] text-neutral-500 font-light text-center leading-relaxed max-w-sm px-4">
+                  Google Drive video will open directly in a new tab for native mobile controls and full screen compatibility.
+                </p>
+              )}
             </div>
           )}
         </div>
