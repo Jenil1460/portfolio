@@ -14,6 +14,12 @@ client/dist/
 # Local Uploads
 server/uploads/*
 !server/uploads/.gitkeep
+!server/uploads/1782410725303-ca7cb1r-WhatsApp_Image_2026_06_21_at_5.12.34_PM.jpeg
+!server/uploads/1782410823552-13zg5bq-IMG_20260621_184009.jpg_removebg_preview.png
+!server/uploads/1782412632774-9xn4th6-logo_removebg_preview.png
+!server/uploads/1782412646520-0l9e865-WhatsApp_Image_2026_05_13_at_12.38.19_PM.jpeg
+!server/uploads/1782413125799-7ixw0gz-WhatsApp_Image_2026_06_21_at_5.12.26_PM.jpeg
+!server/uploads/1782413175092-lze07x3-Screenshot_2026_06_09_112011.png
 
 # System/IDE Files
 .DS_Store

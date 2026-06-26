@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+let baseUrl = import.meta.env.VITE_API_URL || '/api';
+
+// Auto-correct base URL in production if VITE_API_URL is configured without the /api suffix
+if (baseUrl.startsWith('http') && !baseUrl.endsWith('/api') && !baseUrl.includes('/api/')) {
+  // Clean trailing slash if present
+  baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  baseUrl = `${baseUrl}/api`;
+}
+
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: baseUrl,
 });
 
 // Automatically inject JWT token into header

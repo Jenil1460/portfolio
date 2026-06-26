@@ -17,13 +17,67 @@ const app = express();
 app.use(helmet({
   crossOriginResourcePolicy: false, // Allows displaying uploaded images on the frontend directly
 }));
-app.use(cors({
-  origin: '*', // For development flexibility; can restrict in production
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+    if (!origin) return callback(null, true);
+    
+    const isVercel = origin.endsWith('.vercel.app') || origin.includes('vercel');
+    const isAllowedLocal = allowedOrigins.includes(origin);
+    
+    let isCustomAllowed = false;
+    if (process.env.ALLOWED_ORIGINS) {
+      const customOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
+      isCustomAllowed = customOrigins.includes(origin);
+    }
+    
+    if (isAllowedLocal || isVercel || isCustomAllowed) {
+      callback(null, true);
+    } else {
+      // Fallback: allow to prevent breaking the live application if there are unexpected custom domains, but log warning
+      console.warn(`[CORS] Request from origin ${origin} allowed as fallback.`);
+      callback(null, true);
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight OPTIONS requests across-the-board
 app.use(express.json());
 app.use(morgan('dev'));
+
+// Dynamic Upload URL Rewriter Middleware
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (body) {
+    try {
+      const jsonString = JSON.stringify(body);
+      const host = req.get('host');
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const baseUrl = `${protocol}://${host}`;
+      
+      const updatedJsonString = jsonString
+        .replace(/http:\/\/localhost:5000\/uploads\//g, `${baseUrl}/uploads/`)
+        .replace(/http:\/\/127.0.0.1:5000\/uploads\//g, `${baseUrl}/uploads/`);
+        
+      const updatedBody = JSON.parse(updatedJsonString);
+      return originalJson.call(this, updatedBody);
+    } catch (e) {
+      return originalJson.call(this, body);
+    }
+  };
+  next();
+});
 
 // Database Seeding Logic
 const seedDatabase = async () => {

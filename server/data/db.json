@@ -21,6 +21,17 @@
       "coverImage": "http://localhost:5000/uploads/1782410725303-ca7cb1r-WhatsApp_Image_2026_06_21_at_5.12.34_PM.jpeg",
       "description": "wedding",
       "slug": "wedding"
+    },
+    {
+      "_id": "6a3d7748e57dbfba1518adbf",
+      "createdAt": "2026-06-25T18:45:28.598Z",
+      "updatedAt": "2026-06-25T18:45:28.598Z",
+      "order": 4,
+      "active": true,
+      "name": "gym",
+      "coverImage": "http://localhost:5000/uploads/1782413125799-7ixw0gz-WhatsApp_Image_2026_06_21_at_5.12.26_PM.jpeg",
+      "description": "gymmmmmmmmmmmmmmmmmmm",
+      "slug": "gym"
     }
   ],
   "videos": [
@@ -30,7 +41,7 @@
       "updatedAt": "2026-06-25T18:07:07.648Z",
       "featured": true,
       "published": true,
-      "views": 26,
+      "views": 28,
       "duration": "10.00",
       "title": "wedd",
       "description": "wed",

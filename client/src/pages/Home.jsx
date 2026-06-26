@@ -11,6 +11,8 @@ const Home = () => {
   
   const [loadingCats, setLoadingCats] = useState(true);
   const [loadingVids, setLoadingVids] = useState(true);
+  const [errorCats, setErrorCats] = useState(null);
+  const [errorVids, setErrorVids] = useState(null);
   
   // Filtering & Pagination State
   const [activeCategory, setActiveCategory] = useState('all');
@@ -26,26 +28,32 @@ const Home = () => {
   };
 
   // Fetch Categories
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setLoadingCats(true);
-        const res = await API.get('/categories?active=true');
-        if (res.data.success) {
-          setCategories(res.data.data);
-        }
-      } catch (error) {
-        console.error('Error fetching categories:', error);
-      } finally {
-        setLoadingCats(false);
+  const fetchCategories = useCallback(async () => {
+    try {
+      setLoadingCats(true);
+      setErrorCats(null);
+      const res = await API.get('/categories?active=true');
+      if (res.data.success) {
+        setCategories(res.data.data);
+      } else {
+        setErrorCats('Failed to load categories');
       }
-    };
-    fetchCategories();
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      setErrorCats('Failed to load categories');
+    } finally {
+      setLoadingCats(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   // Fetch Videos
   const fetchVideos = useCallback(async () => {
     setLoadingVids(true);
+    setErrorVids(null);
     try {
       const categoryParam = activeCategory !== 'all' ? activeCategory : '';
       const res = await API.get('/videos', {
@@ -59,9 +67,12 @@ const Home = () => {
       if (res.data.success) {
         setVideos(res.data.data);
         setTotalPages(res.data.pages || 1);
+      } else {
+        setErrorVids('Failed to fetch videos');
       }
     } catch (error) {
       console.error('Error fetching videos:', error);
+      setErrorVids(error.response?.data?.message || 'Failed to connect to the server');
     } finally {
       setLoadingVids(false);
     }
@@ -144,6 +155,24 @@ const Home = () => {
             {[...Array(6)].map((_, i) => (
               <div key={i} className="aspect-video bg-[#171717] rounded-[16px] border border-white/5 animate-pulse" />
             ))}
+          </div>
+        ) : errorVids ? (
+          <div className="border border-red-500/10 rounded-[16px] p-12 text-center max-w-lg mx-auto bg-[#140E0E] mt-12 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto text-red-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-alert-circle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-white">Connection Error</p>
+              <p className="text-[11px] text-neutral-400 font-light leading-relaxed">
+                {errorVids}
+              </p>
+            </div>
+            <button
+              onClick={fetchVideos}
+              className="inline-block text-[10px] uppercase tracking-widest bg-white hover:bg-neutral-200 text-black px-6 py-2.5 rounded-full font-bold transition-colors cursor-pointer"
+            >
+              Retry Connection
+            </button>
           </div>
         ) : videos.length > 0 ? (
           <div className="space-y-12 pt-4">
