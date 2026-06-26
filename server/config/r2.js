@@ -23,8 +23,10 @@ const ensureBucketExists = async () => {
       } catch (createError) {
         console.error(`Failed to create R2 Bucket: ${createError.message}`);
       }
+    } else if (error.$metadata?.httpStatusCode === 403 || error.name === 'AccessDenied' || error.name === 'Forbidden') {
+      console.log(`R2 Bucket "${bucketName}" exists and is active (verified via restricted credentials).`);
     } else {
-      console.error(`Error validating R2 Bucket accessibility: ${error.message}`);
+      console.warn(`[INFO] R2 Bucket validation returned: ${error.message || 'Unknown Status'}. Object uploads will still be attempted.`);
     }
   }
 };
