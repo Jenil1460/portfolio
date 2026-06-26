@@ -203,7 +203,7 @@ const Work = () => {
                       <img
                         src={video.thumbnail}
                         alt={video.title}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7] grayscale group-hover:grayscale-0"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7]"
                         loading="lazy"
                       />
                       

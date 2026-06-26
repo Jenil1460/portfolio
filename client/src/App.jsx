@@ -11,9 +11,6 @@ import VideoPlayerPage from './pages/VideoPlayerPage';
 // Admin pages
 import AdminLogin from './pages/admin/AdminLogin';
 import Dashboard from './pages/admin/Dashboard';
-import CategoryManager from './pages/admin/CategoryManager';
-import VideoManager from './pages/admin/VideoManager';
-import SettingsManager from './pages/admin/SettingsManager';
 
 // Providers
 import { AuthProvider } from './context/AuthContext';
@@ -37,46 +34,15 @@ const AppContent = () => {
           <Route path="/video/:id" element={<VideoPlayerPage />} />
           
           {/* Admin Login Gate */}
+          <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           
           {/* Secured Portals */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="/admin/dashboard"
             element={
               <ProtectedRoute>
                 <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/categories"
-            element={
-              <ProtectedRoute>
-                <CategoryManager />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/videos"
-            element={
-              <ProtectedRoute>
-                <VideoManager />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/settings"
-            element={
-              <ProtectedRoute>
-                <SettingsManager />
               </ProtectedRoute>
             }
           />

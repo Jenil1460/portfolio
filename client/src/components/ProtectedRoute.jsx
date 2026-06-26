@@ -17,7 +17,7 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!admin) {
-    return <Navigate to="/admin/login" replace />;
+    return <Navigate to="/admin" replace />;
   }
 
   return children;

@@ -17,7 +17,7 @@ const AdminLogin = () => {
   // Auto redirect if already logged in
   useEffect(() => {
     if (!loading && admin) {
-      navigate('/admin');
+      navigate('/admin/dashboard');
     }
   }, [admin, loading, navigate]);
 
@@ -42,7 +42,7 @@ const AdminLogin = () => {
     setSubmitting(false);
 
     if (result.success) {
-      navigate('/admin');
+      navigate('/admin/dashboard');
     } else {
       setError(result.message || 'Login failed. Please check credentials.');
     }

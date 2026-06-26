@@ -1,5 +1,4 @@
 import React, { useContext } from 'react';
-import { Link } from 'react-router-dom';
 import { SettingsContext } from '../context/SettingsContext';
 
 const Footer = () => {
@@ -51,14 +50,6 @@ const Footer = () => {
           >
             Behance
           </a>
-          <span className="text-neutral-800 font-light">|</span>
-          <Link
-            to="/admin"
-            className="text-neutral-500 hover:text-white transition-colors lowercase"
-            id="admin-portal-footer-link"
-          >
-            portal
-          </Link>
         </div>
       </div>
     </footer>

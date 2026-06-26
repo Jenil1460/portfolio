@@ -1,303 +1,796 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Film, FolderOpen, HardDrive, PlusCircle, Settings as SettingsIcon, Video, LayoutDashboard, Clock, Eye } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, X, Upload, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import API from '../../services/api';
-import { StatsDashboardSkeleton } from '../../components/SkeletonLoader';
 
 const Dashboard = () => {
   const { admin } = useContext(AuthContext);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
-  const fetchStats = async () => {
+  // Lists
+  const [categories, setCategories] = useState([]);
+  const [videos, setVideos] = useState([]);
+  const [loadingCats, setLoadingCats] = useState(true);
+  const [loadingVids, setLoadingVids] = useState(true);
+
+  // Modals status
+  const [catModal, setCatModal] = useState({ open: false, mode: 'add', data: null });
+  const [vidModal, setVidModal] = useState({ open: false, mode: 'add', data: null });
+
+  // Category Form values
+  const [catName, setCatName] = useState('');
+  const [catCoverImage, setCatCoverImage] = useState('');
+  const [catUploading, setCatUploading] = useState(false);
+  const [catSaving, setCatSaving] = useState(false);
+
+  // Video Form values
+  const [vidTitle, setVidTitle] = useState('');
+  const [vidCategory, setVidCategory] = useState('');
+  const [vidVideoUrl, setVidVideoUrl] = useState('');
+  const [vidThumbnail, setVidThumbnail] = useState('');
+  const [vidUploading, setVidUploading] = useState(false);
+  const [vidSaving, setVidSaving] = useState(false);
+
+  // Toast status
+  const [toast, setToast] = useState({ text: '', type: 'success' });
+
+  // Fetch Data
+  const fetchCategories = async () => {
     try {
-      setLoading(true);
-      const res = await API.get('/auth/stats');
+      setLoadingCats(true);
+      const res = await API.get('/categories');
       if (res.data.success) {
-        setStats(res.data.data);
+        setCategories(res.data.data);
       }
     } catch (err) {
-      console.error('Error fetching statistics:', err);
-      setError('Failed to fetch administrative metrics');
+      console.error('Error fetching categories:', err);
+      showToast('Failed to load categories', 'error');
     } finally {
-      setLoading(false);
+      setLoadingCats(false);
+    }
+  };
+
+  const fetchVideos = async () => {
+    try {
+      setLoadingVids(true);
+      const res = await API.get('/videos');
+      if (res.data.success) {
+        setVideos(res.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching videos:', err);
+      showToast('Failed to load videos', 'error');
+    } finally {
+      setLoadingVids(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
+    fetchCategories();
+    fetchVideos();
   }, []);
 
-  // Format bytes to readable string
-  const formatBytes = (bytes) => {
-    if (bytes === 0) return '0.00 MB';
-    const mb = bytes / (1024 * 1024);
-    if (mb < 1000) return `${mb.toFixed(2)} MB`;
-    return `${(mb / 1024).toFixed(2)} GB`;
+  // Utility to show toasts
+  const showToast = (text, type = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast({ text: '', type: 'success' }), 4000);
   };
 
-  // Merge the 5 most recently created videos and categories
-  const getCombinedActivity = () => {
-    if (!stats) return [];
-    const videos = (stats.recentVideos || []).map(v => ({
-      _id: v._id,
-      title: v.title,
-      type: 'video',
-      createdAt: v.createdAt
-    }));
-    const categories = (stats.recentCategories || []).map(c => ({
-      _id: c._id,
-      title: c.name,
-      type: 'category',
-      createdAt: c.createdAt
-    }));
+  // Image Upload handler
+  const handleImageUpload = async (e, setUrl, setUploading) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    return [...videos, ...categories]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5);
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Image size exceeds 10MB limit', 'error');
+      return;
+    }
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const res = await API.post('/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.success) {
+        setUrl(res.data.url);
+        showToast('Image uploaded successfully');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      showToast(err.response?.data?.message || 'Failed to upload image', 'error');
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const combinedActivity = getCombinedActivity();
+  // --- Category CRUD Handlers ---
+
+  const openAddCategory = () => {
+    setCatName('');
+    setCatCoverImage('');
+    setCatModal({ open: true, mode: 'add', data: null });
+  };
+
+  const openEditCategory = (cat) => {
+    setCatName(cat.name);
+    setCatCoverImage(cat.coverImage);
+    setCatModal({ open: true, mode: 'edit', data: cat });
+  };
+
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+
+    // Frontend validations
+    if (!catName.trim()) {
+      showToast('Category name is required', 'error');
+      return;
+    }
+    if (!catCoverImage) {
+      showToast('Cover image is required', 'error');
+      return;
+    }
+
+    // Frontend duplicate validation
+    const editingId = catModal.data?._id;
+    const isDuplicate = categories.some(
+      (cat) =>
+        cat.name.toLowerCase().trim() === catName.toLowerCase().trim() &&
+        cat._id !== editingId
+    );
+    if (isDuplicate) {
+      showToast('Duplicate category names are not allowed', 'error');
+      return;
+    }
+
+    const payload = {
+      name: catName.trim(),
+      coverImage: catCoverImage,
+    };
+
+    setCatSaving(true);
+    try {
+      if (catModal.mode === 'edit') {
+        const res = await API.put(`/categories/${editingId}`, payload);
+        if (res.data.success) {
+          showToast('Category updated successfully');
+          setCatModal({ open: false, mode: 'add', data: null });
+          fetchCategories();
+          fetchVideos();
+        }
+      } else {
+        const res = await API.post('/categories', payload);
+        if (res.data.success) {
+          showToast('Category created successfully');
+          setCatModal({ open: false, mode: 'add', data: null });
+          fetchCategories();
+        }
+      }
+    } catch (err) {
+      console.error('Save category error:', err);
+      showToast(err.response?.data?.message || 'Failed to save category', 'error');
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (cat) => {
+    if (cat.videoCount > 0) {
+      const confirmText = `This category contains ${cat.videoCount} videos. Delete the category and all related videos?`;
+      if (window.confirm(confirmText)) {
+        try {
+          const res = await API.delete(`/categories/${cat._id}?cascade=true`);
+          if (res.data.success) {
+            showToast('Category and all related videos deleted successfully');
+            fetchCategories();
+            fetchVideos();
+          }
+        } catch (err) {
+          console.error('Delete cascade category error:', err);
+          showToast(err.response?.data?.message || 'Failed to delete category', 'error');
+        }
+      }
+    } else {
+      if (window.confirm('Are you sure you want to delete this category?')) {
+        try {
+          const res = await API.delete(`/categories/${cat._id}`);
+          if (res.data.success) {
+            showToast('Category deleted successfully');
+            fetchCategories();
+          }
+        } catch (err) {
+          console.error('Delete category error:', err);
+          showToast(err.response?.data?.message || 'Failed to delete category', 'error');
+        }
+      }
+    }
+  };
+
+  // --- Video CRUD Handlers ---
+
+  const openAddVideo = () => {
+    setVidTitle('');
+    setVidCategory('');
+    setVidVideoUrl('');
+    setVidThumbnail('');
+    setVidModal({ open: true, mode: 'add', data: null });
+  };
+
+  const openEditVideo = (vid) => {
+    setVidTitle(vid.title);
+    setVidCategory(vid.category?._id || vid.category || '');
+    setVidVideoUrl(vid.videoUrl);
+    setVidThumbnail(vid.thumbnail);
+    setVidModal({ open: true, mode: 'edit', data: vid });
+  };
+
+  const handleVideoSubmit = async (e) => {
+    e.preventDefault();
+
+    // Frontend validations
+    if (!vidTitle.trim()) {
+      showToast('Video title is required', 'error');
+      return;
+    }
+    if (!vidCategory) {
+      showToast('Category selection is required', 'error');
+      return;
+    }
+    if (!vidVideoUrl.trim()) {
+      showToast('Video link is required', 'error');
+      return;
+    }
+    if (!vidThumbnail) {
+      showToast('Thumbnail is required', 'error');
+      return;
+    }
+
+    const payload = {
+      title: vidTitle.trim(),
+      category: vidCategory,
+      videoUrl: vidVideoUrl.trim(),
+      thumbnail: vidThumbnail,
+    };
+
+    setVidSaving(true);
+    try {
+      if (vidModal.mode === 'edit') {
+        const editingId = vidModal.data?._id;
+        const res = await API.put(`/videos/${editingId}`, payload);
+        if (res.data.success) {
+          showToast('Video updated successfully');
+          setVidModal({ open: false, mode: 'add', data: null });
+          fetchVideos();
+          fetchCategories();
+        }
+      } else {
+        const res = await API.post('/videos', payload);
+        if (res.data.success) {
+          showToast('Video created successfully');
+          setVidModal({ open: false, mode: 'add', data: null });
+          fetchVideos();
+          fetchCategories();
+        }
+      }
+    } catch (err) {
+      console.error('Save video error:', err);
+      showToast(err.response?.data?.message || 'Failed to save video', 'error');
+    } finally {
+      setVidSaving(false);
+    }
+  };
+
+  const handleDeleteVideo = async (vid) => {
+    if (window.confirm('Are you sure you want to delete this video?')) {
+      try {
+        const res = await API.delete(`/videos/${vid._id}`);
+        if (res.data.success) {
+          showToast('Video deleted successfully');
+          fetchVideos();
+          fetchCategories();
+        }
+      } catch (err) {
+        console.error('Delete video error:', err);
+        showToast(err.response?.data?.message || 'Failed to delete video', 'error');
+      }
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white pt-28 pb-16 px-6 md:px-12">
-      <div className="max-w-7xl mx-auto space-y-10">
-        
-        {/* Welcome row */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-white/5 pb-8 gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center space-x-2 text-neutral-400">
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-[0.25em] font-semibold">Studio Panel</span>
+    <div className="min-h-screen bg-black text-white pt-24 md:pt-28 pb-12 md:pb-16 px-4 md:px-12 select-none">
+      {/* Toast Alert */}
+      {toast.text && (
+        <div
+          className={`fixed top-24 right-4 sm:right-6 z-50 p-4 rounded-xl flex items-center space-x-2 text-xs border shadow-2xl transition-all duration-300 animate-slide-in max-w-[90vw] ${
+            toast.type === 'error'
+              ? 'bg-red-950/95 border-red-500/20 text-red-400'
+              : 'bg-green-950/95 border-green-500/20 text-green-400'
+          }`}
+          id="admin-toast-message"
+        >
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          ) : (
+            <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+          )}
+          <span className="truncate">{toast.text}</span>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto space-y-10 md:space-y-12">
+        {/* Categories Section */}
+        <div className="space-y-4 md:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/5 pb-4 gap-4">
+            <div>
+              <h2 className="text-lg md:text-2xl font-display font-extrabold uppercase tracking-wider text-white">Categories</h2>
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest mt-1">Manage film collections</p>
             </div>
-            <h1 className="text-3xl md:text-4xl uppercase font-extrabold tracking-tight font-display">
-              Welcome, {admin?.name || 'Administrator'}
-            </h1>
-            <p className="text-xs text-neutral-500 font-light">
-              Management system configuration for Twoshot Video Portfolio.
-            </p>
-          </div>
-          
-          <div className="flex space-x-3">
-            <Link
-              to="/admin/videos?action=add"
-              className="flex items-center space-x-2 bg-white text-black px-4 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider hover:bg-neutral-200 transition-colors"
-              id="add-video-dashboard-link"
+            <button
+              onClick={openAddCategory}
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-white text-black px-5 py-3 md:py-2.5 rounded-xl min-h-[44px] text-sm md:text-xs font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer shadow-md"
+              id="add-category-btn"
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>Add Video</span>
-            </Link>
-            <Link
-              to="/admin/categories?action=add"
-              className="flex items-center space-x-2 border border-white/10 hover:border-white/30 px-4 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors"
-              id="add-category-dashboard-link"
-            >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle className="w-5 h-5 md:w-4 md:h-4" />
               <span>Add Category</span>
-            </Link>
+            </button>
           </div>
-        </div>
 
-        {/* Dashboard Grid Modules */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Link
-            to="/admin/categories"
-            className="glass-card p-6 rounded-xl border border-white/5 space-y-4 hover:border-white/10 transition-all flex items-center justify-between"
-            id="manage-categories-card"
-          >
-            <div className="space-y-2">
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-semibold block">Categories</span>
-              <span className="text-xl font-display font-extrabold block uppercase">Category Management</span>
-              <p className="text-[11px] text-neutral-400 font-light leading-relaxed">Add, modify, and set list orders for film showcase tabs.</p>
-            </div>
-            <FolderOpen className="w-10 h-10 text-white/20 flex-shrink-0 ml-4" />
-          </Link>
-
-          <Link
-            to="/admin/videos"
-            className="glass-card p-6 rounded-xl border border-white/5 space-y-4 hover:border-white/10 transition-all flex items-center justify-between"
-            id="manage-videos-card"
-          >
-            <div className="space-y-2">
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-semibold block">Videos</span>
-              <span className="text-xl font-display font-extrabold block uppercase">Video Management</span>
-              <p className="text-[11px] text-neutral-400 font-light leading-relaxed">Publish new titles, map URLs, adjust durations and upload thumbnails.</p>
-            </div>
-            <Film className="w-10 h-10 text-white/20 flex-shrink-0 ml-4" />
-          </Link>
-
-          <Link
-            to="/admin/settings"
-            className="glass-card p-6 rounded-xl border border-white/5 space-y-4 hover:border-white/10 transition-all flex items-center justify-between"
-            id="manage-settings-card"
-          >
-            <div className="space-y-2">
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-semibold block">Branding</span>
-              <span className="text-xl font-display font-extrabold block uppercase">Settings Manager</span>
-              <p className="text-[11px] text-neutral-400 font-light leading-relaxed">Modify contact records, WhatsApp tags, hero overlays, and crew bios.</p>
-            </div>
-            <SettingsIcon className="w-10 h-10 text-white/20 flex-shrink-0 ml-4" />
-          </Link>
-        </div>
-
-        {/* Statistics Row */}
-        {loading ? (
-          <StatsDashboardSkeleton />
-        ) : error ? (
-          <div className="bg-red-950/20 border border-red-500/20 text-red-400 text-xs px-4 py-3 rounded-lg" id="stats-error-display">
-            {error}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="stats-grid">
-            <div className="bg-neutral-950 border border-white/5 rounded-xl p-6 space-y-2">
-              <div className="flex items-center justify-between text-neutral-500">
-                <span className="text-[10px] uppercase tracking-widest font-semibold">Total Categories</span>
-                <FolderOpen className="w-4 h-4" />
+          <div className="bg-neutral-950 border border-white/5 rounded-xl overflow-hidden shadow-2xl">
+            {loadingCats ? (
+              <div className="p-8 flex items-center justify-center space-x-2 text-neutral-400 text-xs font-light">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading Categories...</span>
               </div>
-              <span className="text-3xl font-display font-extrabold block" id="total-categories-stat">{stats?.totalCategories}</span>
-            </div>
-
-            <div className="bg-neutral-950 border border-white/5 rounded-xl p-6 space-y-2">
-              <div className="flex items-center justify-between text-neutral-500">
-                <span className="text-[10px] uppercase tracking-widest font-semibold">Total Videos</span>
-                <Video className="w-4 h-4" />
-              </div>
-              <span className="text-3xl font-display font-extrabold block" id="total-videos-stat">{stats?.totalVideos}</span>
-            </div>
-
-            <div className="bg-neutral-950 border border-white/5 rounded-xl p-6 space-y-2">
-              <div className="flex items-center justify-between text-neutral-500">
-                <span className="text-[10px] uppercase tracking-widest font-semibold">Images Uploaded</span>
-                <HardDrive className="w-4 h-4" />
-              </div>
-              <span className="text-3xl font-display font-extrabold block" id="total-images-stat">{stats?.fileCount}</span>
-            </div>
-
-            <div className="bg-neutral-950 border border-white/5 rounded-xl p-6 space-y-2">
-              <div className="flex items-center justify-between text-neutral-500">
-                <span className="text-[10px] uppercase tracking-widest font-semibold">Storage Used (R2)</span>
-                <HardDrive className="w-4 h-4" />
-              </div>
-              <span className="text-3xl font-display font-extrabold block" id="total-storage-stat">{formatBytes(stats?.storageUsed || 0)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Unified Bottom Activity Section */}
-        {!loading && stats && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Unified Activity Log */}
-            <div className="bg-neutral-950 border border-white/5 rounded-xl p-6 space-y-6" id="activity-log-widget">
-              <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
-                <Clock className="w-4 h-4 text-neutral-500" />
-                <h3 className="text-sm uppercase tracking-wider font-extrabold font-display">Latest Activity</h3>
-              </div>
-              
-              {combinedActivity.length > 0 ? (
-                <div className="space-y-4">
-                  {combinedActivity.map((activity) => {
-                    const isVideo = activity.type === 'video';
-                    const icon = isVideo ? <Video className="w-3.5 h-3.5 text-neutral-400" /> : <FolderOpen className="w-3.5 h-3.5 text-neutral-400" />;
-                    const typeLabel = isVideo ? 'Video Added' : 'Category Created';
-                    const dateStr = new Date(activity.createdAt).toLocaleDateString(undefined, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    });
-                    
-                    return (
-                      <div key={`${activity.type}-${activity._id}`} className="flex items-start justify-between border-b border-white/5 pb-3 last:border-0 last:pb-0" id={`activity-item-${activity.type}-${activity._id}`}>
-                        <div className="flex items-start space-x-3 min-w-0">
-                          <div className="p-2 bg-neutral-900 border border-white/5 rounded-lg flex-shrink-0 mt-0.5">
-                            {icon}
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block text-xs font-bold text-white truncate">
-                              {activity.title}
-                            </span>
-                            <span className="block text-[10px] text-neutral-500 uppercase tracking-wider mt-0.5">
-                              {typeLabel} • {dateStr}
-                            </span>
-                          </div>
-                        </div>
-                        <Link
-                          to={isVideo ? `/admin/videos` : `/admin/categories`}
-                          className="text-[10px] text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 rounded px-2.5 py-1.5 transition-all uppercase tracking-wider font-semibold flex-shrink-0"
-                          id={`manage-activity-btn-${activity.type}-${activity._id}`}
-                        >
-                          Manage
-                        </Link>
+            ) : categories.length > 0 ? (
+              <>
+                {/* Mobile Card List */}
+                <div className="block sm:hidden space-y-4 p-4">
+                  {categories.map((cat) => (
+                    <div key={cat._id} className="bg-neutral-900/40 border border-white/5 p-4 rounded-xl space-y-4 shadow-sm">
+                      <div className="aspect-video rounded-lg overflow-hidden border border-white/10">
+                        <img src={cat.coverImage} alt={cat.name} className="w-full h-full object-cover" />
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-base font-bold text-white truncate">{cat.name}</span>
+                        <span className="text-xs bg-white/5 border border-white/5 px-2.5 py-1 rounded-full font-mono text-neutral-400 flex-shrink-0">
+                          {cat.videoCount || 0} {cat.videoCount === 1 ? 'Video' : 'Videos'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <button
+                          onClick={() => openEditCategory(cat)}
+                          className="flex items-center justify-center space-x-2 border border-white/10 hover:border-white/30 rounded-xl min-h-[44px] text-sm font-semibold text-neutral-300 hover:text-white cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(cat)}
+                          className="flex items-center justify-center space-x-2 border border-red-500/10 hover:border-red-500/30 rounded-xl min-h-[44px] text-sm font-semibold text-red-400 hover:text-red-300 cursor-pointer bg-red-950/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <p className="text-xs text-neutral-500 font-light">No recent activity detected.</p>
-              )}
-            </div>
 
-            {/* Recent Video Uploads */}
-            {stats.recentVideos && (
-              <div className="bg-neutral-950 border border-white/5 rounded-xl p-6 space-y-6" id="recent-uploads-widget">
-                <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
-                  <Film className="w-4 h-4 text-neutral-500" />
-                  <h3 className="text-sm uppercase tracking-wider font-extrabold font-display">Recent Video Uploads</h3>
-                </div>
-                
-                {stats.recentVideos.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs font-light" id="recent-uploads-table">
-                      <thead>
-                        <tr className="border-b border-white/5 text-neutral-500 font-semibold uppercase tracking-wider">
-                          <th className="pb-3">Title</th>
-                          <th className="pb-3">Category</th>
-                          <th className="pb-3">Views</th>
-                          <th className="pb-3">Date Added</th>
-                          <th className="pb-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stats.recentVideos.map((vid) => (
-                          <tr key={vid._id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors" id={`recent-vid-row-${vid._id}`}>
-                            <td className="py-4 font-semibold text-white truncate max-w-[150px]">{vid.title}</td>
-                            <td className="py-4 text-neutral-400">{vid.category?.name || 'Unassigned'}</td>
-                            <td className="py-4 text-neutral-400">
-                              <span className="flex items-center space-x-1 font-mono">
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>{vid.views}</span>
-                              </span>
-                            </td>
-                            <td className="py-4 text-neutral-400">
-                              {new Date(vid.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                            </td>
-                            <td className="py-4 text-right">
-                              <Link
-                                to={`/video/${vid._id}`}
-                                className="text-white hover:text-neutral-300 border border-white/10 hover:border-white/30 rounded px-2.5 py-1 transition-all inline-block"
-                                id={`watch-recent-btn-${vid._id}`}
+                {/* Desktop Table View */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-left text-xs font-light">
+                    <thead>
+                      <tr className="border-b border-white/5 text-neutral-500 font-semibold uppercase tracking-wider">
+                        <th className="px-6 py-4">Cover Image</th>
+                        <th className="px-6 py-4">Category Name</th>
+                        <th className="px-6 py-4">Total Videos</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {categories.map((cat) => (
+                        <tr key={cat._id} className="hover:bg-white/2 transition-colors">
+                          <td className="px-6 py-4">
+                            <img
+                              src={cat.coverImage}
+                              alt={cat.name}
+                              className="w-20 aspect-video object-cover rounded border border-white/10 shadow-inner"
+                            />
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-white text-sm">{cat.name}</td>
+                          <td className="px-6 py-4 text-neutral-400 font-mono font-medium">{cat.videoCount || 0}</td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end space-x-3">
+                              <button
+                                onClick={() => openEditCategory(cat)}
+                                className="p-2 border border-white/10 hover:border-white/30 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer min-h-[36px] flex items-center justify-center"
+                                title="Edit Category"
                               >
-                                Watch
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-xs text-neutral-500 font-light">No videos uploaded yet.</p>
-                )}
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCategory(cat)}
+                                className="p-2 border border-white/10 hover:border-red-500/30 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer min-h-[36px] flex items-center justify-center"
+                                title="Delete Category"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="p-8 text-center text-xs text-neutral-500 font-light">
+                No categories created yet. Click "Add Category" to create one.
               </div>
             )}
-
           </div>
-        )}
+        </div>
+
+        {/* Videos Section */}
+        <div className="space-y-4 md:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/5 pb-4 gap-4">
+            <div>
+              <h2 className="text-lg md:text-2xl font-display font-extrabold uppercase tracking-wider text-white">Videos</h2>
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest mt-1">Manage film showcases</p>
+            </div>
+            <button
+              onClick={openAddVideo}
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-white text-black px-5 py-3 md:py-2.5 rounded-xl min-h-[44px] text-sm md:text-xs font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer shadow-md disabled:opacity-50"
+              id="add-video-btn"
+              disabled={categories.length === 0}
+              title={categories.length === 0 ? 'Create a category first before adding videos' : ''}
+            >
+              <PlusCircle className="w-5 h-5 md:w-4 md:h-4" />
+              <span>Add Video</span>
+            </button>
+          </div>
+
+          <div className="bg-neutral-950 border border-white/5 rounded-xl overflow-hidden shadow-2xl">
+            {loadingVids ? (
+              <div className="p-8 flex items-center justify-center space-x-2 text-neutral-400 text-xs font-light">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading Videos...</span>
+              </div>
+            ) : videos.length > 0 ? (
+              <>
+                {/* Mobile Card List */}
+                <div className="block sm:hidden space-y-4 p-4">
+                  {videos.map((vid) => (
+                    <div key={vid._id} className="bg-neutral-900/40 border border-white/5 p-4 rounded-xl space-y-4 shadow-sm">
+                      <div className="aspect-video rounded-lg overflow-hidden border border-white/10">
+                        <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="block text-base font-bold text-white truncate pr-2">{vid.title}</span>
+                        <span className="inline-block text-xs bg-white/5 border border-white/5 px-2.5 py-0.5 rounded-full uppercase font-semibold text-neutral-300">
+                          {vid.category?.name || (categories.find(c => c._id === vid.category)?.name) || 'Unassigned'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <button
+                          onClick={() => openEditVideo(vid)}
+                          className="flex items-center justify-center space-x-2 border border-white/10 hover:border-white/30 rounded-xl min-h-[44px] text-sm font-semibold text-neutral-300 hover:text-white cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteVideo(vid)}
+                          className="flex items-center justify-center space-x-2 border border-red-500/10 hover:border-red-500/30 rounded-xl min-h-[44px] text-sm font-semibold text-red-400 hover:text-red-300 cursor-pointer bg-red-950/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-left text-xs font-light">
+                    <thead>
+                      <tr className="border-b border-white/5 text-neutral-500 font-semibold uppercase tracking-wider">
+                        <th className="px-6 py-4">Thumbnail</th>
+                        <th className="px-6 py-4">Title</th>
+                        <th className="px-6 py-4">Category</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {videos.map((vid) => (
+                        <tr key={vid._id} className="hover:bg-white/2 transition-colors">
+                          <td className="px-6 py-4">
+                            <img
+                              src={vid.thumbnail}
+                              alt={vid.title}
+                              className="w-20 aspect-video object-cover rounded border border-white/10 shadow-inner"
+                            />
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-white text-sm">{vid.title}</td>
+                          <td className="px-6 py-4 text-neutral-400">
+                            <span className="bg-white/5 border border-white/5 px-2.5 py-0.5 rounded-full text-[10px] tracking-wide uppercase font-semibold text-neutral-300">
+                              {vid.category?.name || (categories.find(c => c._id === vid.category)?.name) || 'Unassigned'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end space-x-3">
+                              <button
+                                onClick={() => openEditVideo(vid)}
+                                className="p-2 border border-white/10 hover:border-white/30 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer min-h-[36px] flex items-center justify-center"
+                                title="Edit Video"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteVideo(vid)}
+                                className="p-2 border border-white/10 hover:border-red-500/30 rounded-lg text-neutral-400 hover:text-red-400 transition-colors cursor-pointer min-h-[36px] flex items-center justify-center"
+                                title="Delete Video"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="p-8 text-center text-xs text-neutral-500 font-light">
+                {categories.length === 0
+                  ? 'Please create a category first before adding videos.'
+                  : 'No videos created yet. Click "Add Video" to add one.'}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* --- Category Modal --- */}
+      {catModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 sm:p-6 animate-fade-in">
+          <div className="bg-neutral-950 border border-white/10 p-5 sm:p-8 rounded-xl sm:rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto space-y-6 relative shadow-2xl animate-scale-up">
+            <button
+              onClick={() => setCatModal({ open: false, mode: 'add', data: null })}
+              className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors cursor-pointer p-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-1.5 border-b border-white/5 pb-3">
+              <h3 className="text-lg sm:text-xl uppercase tracking-wider font-extrabold font-display text-white">
+                {catModal.mode === 'edit' ? 'Modify Category' : 'Add Category'}
+              </h3>
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest mt-0.5">
+                Category details and showcase cover
+              </p>
+            </div>
+
+            <form onSubmit={handleCategorySubmit} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={catName}
+                  onChange={(e) => setCatName(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-colors min-h-[44px]"
+                  placeholder="e.g. Narrative Films"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Cover Image
+                </label>
+                {catCoverImage ? (
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-white/15 group max-w-full">
+                    <img src={catCoverImage} alt="Cover Preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setCatCoverImage('')}
+                      className="absolute top-2.5 right-2.5 bg-black/80 text-red-400 hover:text-red-300 p-2.5 rounded-full transition-colors border border-white/5 cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-white/10 hover:border-white/20 rounded-xl aspect-video flex flex-col items-center justify-center p-6 transition-colors max-w-full">
+                    <div className="bg-neutral-900 border border-white/5 p-3 rounded-full mb-2.5">
+                      <Upload className="w-6 h-6 text-neutral-400" />
+                    </div>
+                    <label className="text-sm font-bold cursor-pointer text-white underline hover:text-neutral-300 min-h-[44px] flex items-center justify-center px-4">
+                      Upload Cover Image
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, setCatCoverImage, setCatUploading)}
+                        disabled={catUploading}
+                      />
+                    </label>
+                    <span className="text-[10px] text-neutral-500 mt-1 uppercase tracking-widest font-light">
+                      PNG, JPG up to 10MB
+                    </span>
+                  </div>
+                )}
+
+                {catUploading && (
+                  <div className="flex items-center space-x-2 text-xs text-neutral-400 animate-pulse pt-1">
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Uploading Cover Image to R2...</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-3 sm:space-x-3 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setCatModal({ open: false, mode: 'add', data: null })}
+                  className="w-full sm:w-auto border border-white/10 hover:border-white/30 px-5 py-3 sm:py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer text-neutral-300 hover:text-white min-h-[44px] flex items-center justify-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={catSaving || catUploading}
+                  className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-white text-black px-5 py-3 sm:py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors disabled:opacity-50 cursor-pointer min-h-[44px]"
+                >
+                  {catSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>Save</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- Video Modal --- */}
+      {vidModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 sm:p-6 animate-fade-in">
+          <div className="bg-neutral-950 border border-white/10 p-5 sm:p-8 rounded-xl sm:rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-6 relative shadow-2xl animate-scale-up">
+            <button
+              onClick={() => setVidModal({ open: false, mode: 'add', data: null })}
+              className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors cursor-pointer p-1 min-w-[36px] min-h-[36px] flex items-center justify-center"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-1.5 border-b border-white/5 pb-3">
+              <h3 className="text-lg sm:text-xl uppercase tracking-wider font-extrabold font-display text-white">
+                {vidModal.mode === 'edit' ? 'Modify Video' : 'Add Video'}
+              </h3>
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest mt-0.5">
+                Video details and file linkage mappings
+              </p>
+            </div>
+
+            <form onSubmit={handleVideoSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Video Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={vidTitle}
+                  onChange={(e) => setVidTitle(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-colors min-h-[44px]"
+                  placeholder="e.g. Wedding Highlight Reel"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Category Mapping
+                </label>
+                <select
+                  required
+                  value={vidCategory}
+                  onChange={(e) => setVidCategory(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-white/30 transition-colors min-h-[44px]"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((cat) => (
+                    <option key={cat._id} value={cat._id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Video URL
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={vidVideoUrl}
+                  onChange={(e) => setVidVideoUrl(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-colors min-h-[44px]"
+                  placeholder="e.g. https://drive.google.com/file/d/.../view"
+                />
+                <span className="text-[9px] text-neutral-500 uppercase tracking-widest font-light block mt-1">
+                  Accepts Google Drive Preview URL or direct MP4 URL
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Thumbnail
+                </label>
+                {vidThumbnail ? (
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-white/15 group max-w-full">
+                    <img src={vidThumbnail} alt="Thumbnail Preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setVidThumbnail('')}
+                      className="absolute top-2.5 right-2.5 bg-black/80 text-red-400 hover:text-red-300 p-2.5 rounded-full transition-colors border border-white/5 cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-white/10 hover:border-white/20 rounded-xl aspect-video flex flex-col items-center justify-center p-6 transition-colors max-w-full">
+                    <div className="bg-neutral-900 border border-white/5 p-3 rounded-full mb-2.5">
+                      <Upload className="w-6 h-6 text-neutral-400" />
+                    </div>
+                    <label className="text-sm font-bold cursor-pointer text-white underline hover:text-neutral-300 min-h-[44px] flex items-center justify-center px-4">
+                      Upload Thumbnail
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, setVidThumbnail, setVidUploading)}
+                        disabled={vidUploading}
+                      />
+                    </label>
+                    <span className="text-[10px] text-neutral-500 mt-1 uppercase tracking-widest font-light">
+                      PNG, JPG up to 10MB
+                    </span>
+                  </div>
+                )}
+
+                {vidUploading && (
+                  <div className="flex items-center space-x-2 text-xs text-neutral-400 animate-pulse pt-1">
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Uploading Thumbnail to R2...</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-3 sm:space-x-3 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setVidModal({ open: false, mode: 'add', data: null })}
+                  className="w-full sm:w-auto border border-white/10 hover:border-white/30 px-5 py-3 sm:py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-colors cursor-pointer text-neutral-300 hover:text-white min-h-[44px] flex items-center justify-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={vidSaving || vidUploading}
+                  className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-white text-black px-5 py-3 sm:py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-neutral-200 transition-colors disabled:opacity-50 cursor-pointer min-h-[44px]"
+                >
+                  {vidSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>Save</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

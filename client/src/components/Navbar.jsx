@@ -1,15 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, LogOut, LayoutDashboard } from 'lucide-react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
 import { SettingsContext } from '../context/SettingsContext';
-import { AuthContext } from '../context/AuthContext';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const { settings } = useContext(SettingsContext);
-  const { admin, logout } = useContext(AuthContext);
-  const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
@@ -28,11 +25,6 @@ const Navbar = () => {
   useEffect(() => {
     setIsOpen(false);
   }, [location.pathname]);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
 
   const isAdminRoute = location.pathname.startsWith('/admin');
 
@@ -126,47 +118,12 @@ const Navbar = () => {
             </a>
           )}
 
-          {/* Admin panel status indicator */}
-          {admin ? (
-            <div className="flex items-center space-x-4 border-l border-white/10 pl-8">
-              <Link
-                to="/admin"
-                className="flex items-center space-x-1.5 text-[9px] uppercase tracking-[0.2em] bg-white text-black px-4 py-1.5 rounded-full font-bold hover:bg-neutral-200 transition-colors"
-                id="admin-dashboard-nav-link"
-              >
-                <LayoutDashboard className="w-3 h-3" />
-                <span>Dashboard</span>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="text-neutral-400 hover:text-white transition-colors"
-                title="Log Out"
-                id="logout-nav-btn"
-              >
-                <LogOut className="w-4.5 h-4.5" />
-              </button>
-            </div>
-          ) : (
-            <Link
-              to="/admin/login"
-              className="text-[9px] uppercase tracking-[0.25em] text-neutral-500 hover:text-white transition-colors border border-white/10 px-4 py-1.5 rounded-full hover:border-white/30"
-              id="admin-portal-link"
-            >
-              Portal
-            </Link>
-          )}
+
         </div>
 
         {/* Mobile Hamburger Trigger */}
         <div className="flex md:hidden items-center space-x-4">
-          {admin && (
-            <Link
-              to="/admin"
-              className="text-white border border-white/10 p-2 rounded-full hover:bg-white/10 transition-colors"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-            </Link>
-          )}
+
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="text-white p-1 hover:text-neutral-400 transition-colors focus:outline-none"
@@ -211,26 +168,7 @@ const Navbar = () => {
             )}
           </div>
 
-          <div className="border-t border-white/5 pt-6 pb-12">
-            {admin ? (
-              <button
-                onClick={handleLogout}
-                className="flex items-center justify-center space-x-2 w-full bg-white text-black py-3 rounded-full font-bold uppercase tracking-wider text-xs hover:bg-neutral-200 transition-colors"
-                id="mobile-logout-btn"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Log Out</span>
-              </button>
-            ) : (
-              <Link
-                to="/admin/login"
-                className="text-center block w-full border border-white/10 text-neutral-400 py-3 rounded-full font-medium uppercase tracking-wider text-xs hover:bg-white/5 transition-colors"
-                id="mobile-login-link"
-              >
-                Portal Login
-              </Link>
-            )}
-          </div>
+
         </div>
       )}
     </nav>

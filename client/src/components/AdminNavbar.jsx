@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, LayoutDashboard, FolderOpen, Film, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 import { AuthContext } from '../context/AuthContext';
 
 const AdminNavbar = () => {
@@ -9,94 +9,28 @@ const AdminNavbar = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/admin/login');
+    navigate('/admin');
   };
 
   if (!admin) return null;
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/95 border-b border-white/5 py-4 px-6 md:px-12 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/95 border-b border-white/5 py-4 px-4 md:px-12 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto flex flex-row items-center justify-between gap-4 w-full">
         {/* Title branding */}
-        <Link
-          to="/admin"
-          className="flex items-center font-sans text-xs tracking-[0.25em] font-extrabold uppercase text-white hover:text-neutral-300 transition-colors select-none"
-          id="admin-nav-logo"
-        >
-          <span>RJ.TwoShot</span>
-          <span className="ml-2 bg-white/10 text-neutral-300 border border-white/5 px-2 py-0.5 rounded text-[8px] tracking-wider uppercase font-bold">
-            Portal
-          </span>
-        </Link>
-
-        {/* Dashboard links */}
-        <div className="flex items-center space-x-6 md:space-x-8">
-          <NavLink
-            to="/admin"
-            end
-            className={({ isActive }) =>
-              `flex items-center space-x-1.5 text-[10px] uppercase tracking-wider font-semibold transition-colors duration-300 ${
-                isActive ? 'text-white font-bold' : 'text-neutral-400 hover:text-white'
-              }`
-            }
-          >
-            <LayoutDashboard className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Dashboard</span>
-          </NavLink>
-
-          <NavLink
-            to="/admin/categories"
-            className={({ isActive }) =>
-              `flex items-center space-x-1.5 text-[10px] uppercase tracking-wider font-semibold transition-colors duration-300 ${
-                isActive ? 'text-white font-bold' : 'text-neutral-400 hover:text-white'
-              }`
-            }
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Categories</span>
-          </NavLink>
-
-          <NavLink
-            to="/admin/videos"
-            className={({ isActive }) =>
-              `flex items-center space-x-1.5 text-[10px] uppercase tracking-wider font-semibold transition-colors duration-300 ${
-                isActive ? 'text-white font-bold' : 'text-neutral-400 hover:text-white'
-              }`
-            }
-          >
-            <Film className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Videos</span>
-          </NavLink>
-
-          <NavLink
-            to="/admin/settings"
-            className={({ isActive }) =>
-              `flex items-center space-x-1.5 text-[10px] uppercase tracking-wider font-semibold transition-colors duration-300 ${
-                isActive ? 'text-white font-bold' : 'text-neutral-400 hover:text-white'
-              }`
-            }
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Settings</span>
-          </NavLink>
-
-          <Link
-            to="/"
-            className="text-[10px] text-neutral-400 hover:text-white border border-white/10 hover:border-white/20 rounded-full px-3 py-1 transition-all uppercase tracking-wider font-semibold"
-          >
-            View Site
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="flex items-center space-x-1.5 text-[10px] uppercase tracking-wider font-semibold text-red-400 hover:text-red-300 transition-colors"
-            id="admin-logout-btn"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Log Out</span>
-          </button>
+        <div className="flex items-center font-sans text-xs sm:text-xs tracking-[0.2em] sm:tracking-[0.25em] font-extrabold uppercase text-white select-none truncate">
+          <span>RJ.TwoShot Admin</span>
         </div>
+
+        {/* Logout button */}
+        <button
+          onClick={handleLogout}
+          className="flex items-center justify-center space-x-1.5 text-[11px] sm:text-[10px] uppercase tracking-wider font-bold sm:font-semibold text-red-400 hover:text-red-300 transition-colors cursor-pointer min-h-[44px] px-3.5 border border-red-500/10 rounded-lg bg-red-950/10 flex-shrink-0"
+          id="admin-logout-btn"
+        >
+          <LogOut className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+          <span>Log Out</span>
+        </button>
       </div>
     </nav>
   );

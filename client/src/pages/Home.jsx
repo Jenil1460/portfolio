@@ -122,7 +122,7 @@ const Home = () => {
                       src={cat.coverImage}
                       alt={cat.name}
                       className={`absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
-                        isActive ? 'brightness-[0.45] grayscale-0' : 'brightness-[0.3] grayscale group-hover:grayscale-0 group-hover:brightness-[0.4]'
+                        isActive ? 'brightness-[0.45]' : 'brightness-[0.3] group-hover:brightness-[0.4]'
                       }`}
                       loading="lazy"
                     />
@@ -167,7 +167,7 @@ const Home = () => {
                       <img
                         src={video.thumbnail}
                         alt={video.title}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7] grayscale group-hover:grayscale-0"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7]"
                         loading="lazy"
                       />
                       

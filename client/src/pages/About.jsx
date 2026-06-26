@@ -120,7 +120,7 @@ const About = () => {
                   <img
                     src={member.image}
                     alt={member.name}
-                    className="w-full h-full object-cover grayscale transition-all duration-700 ease-out group-hover:scale-103 group-hover:grayscale-0"
+                    className="w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-103"
                     loading="lazy"
                   />
                 </div>
