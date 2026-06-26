@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 
 const Logo = () => {
@@ -29,8 +28,10 @@ const Logo = () => {
 
   return (
     <div className="flex justify-center items-center py-10 select-none">
-      <Link 
-        to="/"
+      <a 
+        href="https://www.instagram.com/rj.twoshot/"
+        target="_blank"
+        rel="noopener noreferrer"
         ref={containerRef}
         className="font-sans text-xs md:text-sm tracking-[0.35em] font-extrabold uppercase text-white flex items-center justify-center hover:text-white"
         id="homepage-logo"
@@ -43,7 +44,7 @@ const Logo = () => {
             {char === ' ' ? '\u00A0' : char}
           </span>
         ))}
-      </Link>
+      </a>
     </div>
   );
 };
