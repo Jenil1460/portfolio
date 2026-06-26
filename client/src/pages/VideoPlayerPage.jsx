@@ -219,13 +219,27 @@ const NativePlayer = ({ src, poster, onEnded }) => {
 const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
   const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
   const videoUrl = resolveDriveVideoUrl(source.fileId);
-  const { ratio, ready } = useImageRatio(driveThumbnailUrl);
+  const { ratio: detectedRatio, ready } = useImageRatio(driveThumbnailUrl);
   const posterUrl = storedThumbnail || driveThumbnailUrl;
   const [useIframe, setUseIframe] = useState(false);
+  const [videoRatio, setVideoRatio] = useState(null);
+
+  useEffect(() => {
+    if (detectedRatio !== null) {
+      setVideoRatio(detectedRatio);
+    }
+  }, [detectedRatio]);
+
+  const onLoadedMetadata = useCallback((event) => {
+    const { videoWidth: w, videoHeight: h } = event.currentTarget;
+    if (w && h) {
+      setVideoRatio(w / h);
+    }
+  }, []);
 
   if (!ready) return <LoadingShell />;
 
-  const { outerClass, containerStyle } = getLayout(ratio);
+  const { outerClass, containerStyle } = getLayout(videoRatio || detectedRatio);
 
   if (useIframe) {
     if (isMobile()) {
@@ -290,12 +304,12 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
           controls
           playsInline
           preload="metadata"
-          onLoadedMetadata={() => {}}
+          onLoadedMetadata={onLoadedMetadata}
           onEnded={onEnded}
           onError={(e) => {
             const mediaError = e.currentTarget.error;
             console.warn('DrivePlayer HTML5 video error:', mediaError);
-            if (mediaError && [3, 4].includes(mediaError.code)) {
+            if (mediaError && mediaError.code !== 1) {
               setUseIframe(true);
             }
           }}
