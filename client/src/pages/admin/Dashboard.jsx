@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { PlusCircle, Edit, Trash2, X, Upload, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
-import API from '../../services/api';
+import API, { resolveMediaUrl } from '../../services/api';
 
 const Dashboard = () => {
   const { admin } = useContext(AuthContext);
@@ -470,7 +470,7 @@ const Dashboard = () => {
                   {categories.map((cat) => (
                     <div key={cat._id} className="bg-neutral-900/40 border border-white/5 p-4 rounded-xl space-y-4 shadow-sm">
                       <div className="aspect-video rounded-lg overflow-hidden border border-white/10">
-                        <img src={cat.coverImage} alt={cat.name} className="w-full h-full object-cover" />
+                        <img src={resolveMediaUrl(cat.coverImage)} alt={cat.name} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-base font-bold text-white truncate">{cat.name}</span>
@@ -514,7 +514,7 @@ const Dashboard = () => {
                         <tr key={cat._id} className="hover:bg-white/2 transition-colors">
                           <td className="px-6 py-4">
                             <img
-                              src={cat.coverImage}
+                              src={resolveMediaUrl(cat.coverImage)}
                               alt={cat.name}
                               className="w-20 aspect-video object-cover rounded border border-white/10 shadow-inner"
                             />
@@ -585,7 +585,7 @@ const Dashboard = () => {
                   {videos.map((vid) => (
                     <div key={vid._id} className="bg-neutral-900/40 border border-white/5 p-4 rounded-xl space-y-4 shadow-sm">
                       <div className="aspect-video rounded-lg overflow-hidden border border-white/10">
-                        <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover" />
+                        <img src={resolveMediaUrl(vid.thumbnail)} alt={vid.title} className="w-full h-full object-cover" />
                       </div>
                       <div className="space-y-1">
                         <span className="block text-base font-bold text-white truncate pr-2">{vid.title}</span>
@@ -629,7 +629,7 @@ const Dashboard = () => {
                         <tr key={vid._id} className="hover:bg-white/2 transition-colors">
                           <td className="px-6 py-4">
                             <img
-                              src={vid.thumbnail}
+                              src={resolveMediaUrl(vid.thumbnail)}
                               alt={vid.title}
                               className="w-20 aspect-video object-cover rounded border border-white/10 shadow-inner"
                             />
@@ -716,7 +716,7 @@ const Dashboard = () => {
                 </label>
                 {catCoverImage ? (
                   <div className="relative aspect-video rounded-xl overflow-hidden border border-white/15 group max-w-full">
-                    <img src={catCoverImage} alt="Cover Preview" className="w-full h-full object-cover" />
+                    <img src={resolveMediaUrl(catCoverImage)} alt="Cover Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => setCatCoverImage('')}

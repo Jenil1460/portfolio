@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Share2, Eye, Calendar, Clock, Check, Play } from 'lucide-react';
-import API from '../services/api';
+import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
 const VideoPlayerPage = () => {
@@ -67,7 +67,7 @@ const VideoPlayerPage = () => {
   useEffect(() => {
     if (video && video.thumbnail) {
       const img = new Image();
-      img.src = video.thumbnail;
+      img.src = resolveMediaUrl(video.thumbnail);
       img.onload = () => {
         if (img.width < img.height) {
           setAspectRatio('portrait');
@@ -105,6 +105,17 @@ const VideoPlayerPage = () => {
           console.warn("Programmatic play failed. User must use native controls.", err);
           setPlaying(true);
         });
+    }
+  };
+
+  const handleLoadedMetadata = (e) => {
+    const { videoWidth, videoHeight } = e.target;
+    if (videoWidth && videoHeight) {
+      if (videoWidth < videoHeight) {
+        setAspectRatio('portrait');
+      } else {
+        setAspectRatio('landscape');
+      }
     }
   };
 
@@ -189,8 +200,8 @@ const VideoPlayerPage = () => {
       <div className="relative w-full h-full">
         <video
           ref={videoRef}
-          src={source.url}
-          poster={video.thumbnail}
+          src={resolveMediaUrl(source.url)}
+          poster={resolveMediaUrl(video.thumbnail)}
           controls
           playsInline
           webkit-playsinline="true"
@@ -198,8 +209,9 @@ const VideoPlayerPage = () => {
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onEnded={handleVideoEnded}
+          onLoadedMetadata={handleLoadedMetadata}
         />
-        {!playing && (
+        {!playing && !isMobileDevice && (
           <div
             onClick={handlePlayClick}
             className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center cursor-pointer z-20 group transition-all duration-300"
@@ -228,7 +240,7 @@ const VideoPlayerPage = () => {
     );
   }
 
-  const source = getVideoSource(video.videoUrl);
+  const source = getVideoSource(resolveMediaUrl(video.videoUrl));
 
   return (
     <div className="relative min-h-screen bg-[#0A0A0A] text-white pt-24 pb-16 px-6 md:px-12 overflow-hidden select-none">
@@ -236,7 +248,7 @@ const VideoPlayerPage = () => {
       {/* Blurred Ambient Backdrop generated from Thumbnail */}
       <div
         className="absolute inset-0 bg-cover bg-center filter blur-[100px] opacity-15 scale-110 pointer-events-none z-0 transition-all duration-1000"
-        style={{ backgroundImage: `url(${video.thumbnail})` }}
+        style={{ backgroundImage: `url(${resolveMediaUrl(video.thumbnail)})` }}
       />
 
       <div className="relative z-10 max-w-[1200px] mx-auto space-y-8">
@@ -280,7 +292,7 @@ const VideoPlayerPage = () => {
           {source.type === 'drive' && (
             <div className="flex flex-col items-center pt-6 space-y-3">
               <a
-                href={source.fallbackUrl || video.videoUrl}
+                href={source.fallbackUrl || resolveMediaUrl(video.videoUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center space-x-2.5 text-xs uppercase tracking-[0.2em] bg-white hover:bg-neutral-200 text-black px-8 py-4 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-2xl w-full sm:w-auto text-center"
@@ -358,7 +370,7 @@ const VideoPlayerPage = () => {
                 >
                   <div className="relative aspect-video overflow-hidden">
                     <img
-                      src={item.thumbnail}
+                      src={resolveMediaUrl(item.thumbnail)}
                       alt={item.title}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 filter brightness-95"
                     />

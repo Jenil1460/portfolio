@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Film, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import API from '../services/api';
+import API, { resolveMediaUrl } from '../services/api';
 import Logo from '../components/Logo';
 
 const Home = () => {
@@ -130,7 +130,7 @@ const Home = () => {
                 >
                   {cat.coverImage && (
                     <img
-                      src={cat.coverImage}
+                      src={resolveMediaUrl(cat.coverImage)}
                       alt={cat.name}
                       className={`absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
                         isActive ? 'brightness-[0.45]' : 'brightness-[0.3] group-hover:brightness-[0.4]'
@@ -194,7 +194,7 @@ const Home = () => {
                     {/* Thumbnail area with slight zoom and play icon fade in */}
                     <Link to={`/video/${video._id}`} className="block relative aspect-video overflow-hidden bg-[#0A0A0A] clickable">
                       <img
-                        src={video.thumbnail}
+                        src={resolveMediaUrl(video.thumbnail)}
                         alt={video.title}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7]"
                         loading="lazy"

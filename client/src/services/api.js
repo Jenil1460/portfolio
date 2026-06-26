@@ -43,4 +43,19 @@ API.interceptors.response.use(
   }
 );
 
+export const resolveMediaUrl = (url) => {
+  if (!url) return '';
+  const rootUrl = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : (baseUrl.includes('/api/') ? baseUrl.split('/api')[0] : baseUrl);
+  
+  if (url.startsWith('/')) {
+    return `${rootUrl}${url}`;
+  }
+  
+  if (/https?:\/\/(localhost|127\.0\.0\.1):\d+/.test(url)) {
+    return url.replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+/g, rootUrl);
+  }
+  
+  return url;
+};
+
 export default API;
