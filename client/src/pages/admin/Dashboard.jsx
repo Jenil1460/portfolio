@@ -390,7 +390,8 @@ const Dashboard = () => {
       let resolvedThumbnail = vidThumbnail;
       const isNewUrl = vidModal.mode === 'add' || vidVideoUrl.trim() !== vidModal.data?.videoUrl;
 
-      if (isNewUrl) {
+      // Only auto-resolve the thumbnail if no custom thumbnail is provided
+      if (!resolvedThumbnail && isNewUrl) {
         showToast('Extracting thumbnail from video URL...', 'info');
         resolvedThumbnail = await autoResolveThumbnail(vidVideoUrl.trim(), vidCategory);
       }
@@ -879,8 +880,56 @@ const Dashboard = () => {
                   placeholder="e.g. https://drive.google.com/file/d/.../view"
                 />
                 <span className="text-[9px] text-neutral-500 uppercase tracking-widest font-light block mt-1">
-                  Accepts Google Drive Preview URL or direct MP4 URL
+                  Accepts Google Drive Preview URL, Instagram URL, or direct MP4 URL
                 </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Thumbnail Image (Optional)
+                </label>
+                {vidThumbnail ? (
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-white/15 group max-w-full">
+                    <img
+                      src={resolveMediaUrl(vidThumbnail)}
+                      alt="Thumbnail Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVidThumbnail('')}
+                      className="absolute top-2.5 right-2.5 bg-black/80 text-red-400 hover:text-red-300 p-2.5 rounded-full transition-colors border border-white/5 cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-white/10 hover:border-white/20 rounded-xl aspect-video flex flex-col items-center justify-center p-6 transition-colors max-w-full">
+                    <div className="bg-neutral-900 border border-white/5 p-3 rounded-full mb-2.5">
+                      <Upload className="w-6 h-6 text-neutral-400" />
+                    </div>
+                    <label className="text-sm font-bold cursor-pointer text-white underline hover:text-neutral-300 min-h-[44px] flex items-center justify-center px-4">
+                      Upload Custom Thumbnail
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, setVidThumbnail, setVidUploading)}
+                        disabled={vidUploading}
+                      />
+                    </label>
+                    <span className="text-[10px] text-neutral-500 mt-1 uppercase tracking-widest font-light">
+                      PNG, JPG up to 10MB (If left blank, auto-generates from video link)
+                    </span>
+                  </div>
+                )}
+
+                {vidUploading && (
+                  <div className="flex items-center space-x-2 text-xs text-neutral-400 animate-pulse pt-1">
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Uploading Thumbnail to R2...</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row justify-end gap-3 sm:space-x-3 pt-4 border-t border-white/5">
