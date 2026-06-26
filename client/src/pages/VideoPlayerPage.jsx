@@ -156,7 +156,7 @@ const VideoPlayerPage = () => {
           ref={playerWrapperRef}
           onMouseEnter={() => setPlayerHovered(true)}
           onMouseLeave={() => setPlayerHovered(false)}
-          className="video-player-container relative aspect-video w-full rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl"
+          className="video-player-container relative aspect-video w-full max-h-[75vh] sm:max-h-[80vh] lg:max-h-none mx-auto rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl"
         >
           {isGoogleDrive ? (
             <iframe
@@ -165,6 +165,8 @@ const VideoPlayerPage = () => {
               className="absolute inset-0 w-full h-full border-none"
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               allowFullScreen
+              webkitallowfullscreen="true"
+              mozallowfullscreen="true"
             />
           ) : (
             <div className="relative w-full h-full">
