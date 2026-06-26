@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
+  if (process.env.USE_MOCK_DB === 'true') {
+    console.warn(`\n=============================================================`);
+    console.warn(`[DEMO MODE] Activating local JSON database as requested via env!`);
+    console.warn(`All database items will be read from/saved to: server/data/db.json`);
+    console.warn(`=============================================================\n`);
+    return;
+  }
   try {
     const conn = await mongoose.connect(process.env.MONGO_URI, {
       connectTimeoutMS: 2000,

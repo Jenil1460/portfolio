@@ -1,272 +1,396 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Share2, Eye, Calendar, Clock, Check } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
-const VideoPlayerPage = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  
-  const [video, setVideo] = useState(null);
-  const [related, setRelated] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [ratio, setRatio] = useState(16 / 9); // default numerical aspect ratio
-  
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility: parse any video URL into its type + clean embed/src URL
+// ─────────────────────────────────────────────────────────────────────────────
+const parseVideoSource = (rawUrl) => {
+  if (!rawUrl) return { type: 'unknown', src: '' };
+
+  // Google Drive
+  if (rawUrl.includes('drive.google.com') || rawUrl.includes('docs.google.com')) {
+    let fileId = '';
+    const m1 = rawUrl.match(/\/file\/d\/([^/?#&]+)/);
+    const m2 = rawUrl.match(/[?&]id=([^&]+)/);
+    if (m1) fileId = m1[1];
+    else if (m2) fileId = m2[1];
+
+    if (fileId) {
+      return {
+        type: 'drive',
+        fileId,
+        embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+        // Direct download only works for small files / non-blocked
+        directUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
+      };
+    }
+  }
+
+  // YouTube
+  if (rawUrl.includes('youtube.com') || rawUrl.includes('youtu.be')) {
+    let vid = '';
+    const m1 = rawUrl.match(/[?&]v=([^&]+)/);
+    const m2 = rawUrl.match(/youtu\.be\/([^?#]+)/);
+    const m3 = rawUrl.match(/embed\/([^?#]+)/);
+    if (m1) vid = m1[1];
+    else if (m2) vid = m2[1];
+    else if (m3) vid = m3[1];
+    if (vid) {
+      return {
+        type: 'youtube',
+        embedUrl: `https://www.youtube.com/embed/${vid}?autoplay=1&rel=0&playsinline=1&modestbranding=1`,
+      };
+    }
+  }
+
+  // Vimeo
+  if (rawUrl.includes('vimeo.com')) {
+    const m = rawUrl.match(/(?:video\/|vimeo\.com\/)(\d+)/);
+    if (m) {
+      return {
+        type: 'vimeo',
+        embedUrl: `https://player.vimeo.com/video/${m[1]}?autoplay=1&playsinline=1`,
+      };
+    }
+  }
+
+  // Direct / Cloudflare R2 / any MP4
+  return { type: 'direct', src: rawUrl };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Native HTML5 player — used for direct MP4 / R2 streams
+// Reads actual videoWidth × videoHeight from metadata to determine layout.
+// Key prop in parent ensures full unmount on video change.
+// ─────────────────────────────────────────────────────────────────────────────
+const NativePlayer = ({ src, poster, onEnded }) => {
   const videoRef = useRef(null);
+  const [ratio, setRatio] = useState(null); // width / height, null while loading
+
+  const onMetadata = useCallback((e) => {
+    const { videoWidth: w, videoHeight: h } = e.currentTarget;
+    if (w && h) setRatio(w / h);
+  }, []);
+
+  // Derive container style from real pixel dimensions
+  const containerStyle = ratio
+    ? { aspectRatio: String(ratio) }
+    : { aspectRatio: '16/9' };               // placeholder until metadata arrives
+
+  // Portrait: ratio < 1  →  max-w-[420px] centered (like Reels / TikTok)
+  // Square:   ratio ≈ 1  →  max-w-[500px] centered
+  // Landscape: ratio > 1 →  full width
+  const isPortrait = ratio !== null && ratio < 0.99;
+  const isSquare   = ratio !== null && ratio >= 0.99 && ratio <= 1.01;
+
+  const outerClass = [
+    'mx-auto w-full',
+    isPortrait ? 'max-w-[420px]' : isSquare ? 'max-w-[500px]' : 'max-w-full',
+  ].join(' ');
+
+  return (
+    <div className={outerClass}>
+      <div
+        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl"
+        style={containerStyle}
+      >
+        <video
+          ref={videoRef}
+          src={src}
+          poster={poster}
+          controls
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={onMetadata}
+          onEnded={onEnded}
+          className="absolute inset-0 w-full h-full"
+          style={{ objectFit: 'contain', background: '#000' }}
+          // iOS Safari attributes
+          webkit-playsinline="true"
+          x-webkit-airplay="allow"
+        />
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Drive player
+//
+// Strategy:
+//   1. Try to load the file directly with a hidden <video> to read dimensions.
+//   2. If metadata loads → we know the real ratio → render an <iframe> with
+//      the correct aspect ratio container.
+//   3. If the direct stream is blocked (common on mobile) → fall back to
+//      the /preview iframe immediately in a 16:9 container.
+//
+// Only ONE player element ever exists in the DOM at any time.
+// Key prop in parent guarantees fresh component per video.
+// ─────────────────────────────────────────────────────────────────────────────
+const DrivePlayer = ({ source, poster, onEnded }) => {
+  // null = still probing, number = resolved, 'failed' = use fallback immediately
+  const [ratio, setRatio] = useState(null);
+  const probeRef = useRef(null);
 
   useEffect(() => {
-    const fetchVideoDetails = async () => {
-      setLoading(true);
-      try {
-        const res = await API.get(`/videos/${id}`);
-        if (res.data.success) {
-          setVideo(res.data.data);
-          setRelated(res.data.related || []);
-        }
-      } catch (error) {
-        console.error('Error loading video details:', error);
-      } finally {
-        setLoading(false);
-      }
+    // Abort any existing probe
+    const probe = document.createElement('video');
+    probeRef.current = probe;
+    probe.preload = 'metadata';
+    probe.muted = true;
+    probe.playsInline = true;
+    probe.src = source.directUrl;
+
+    const timeout = setTimeout(() => {
+      // Google drive blocked / timed out → use iframe with 16:9 default
+      setRatio('failed');
+      probe.src = '';
+    }, 4000);
+
+    probe.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      const { videoWidth: w, videoHeight: h } = probe;
+      setRatio(w && h ? w / h : 'failed');
+      probe.src = '';
     };
-    
-    fetchVideoDetails();
-  }, [id]);
 
-  // Determine video aspect ratio dynamically based on thumbnail dimensions as first pass / fallback
-  useEffect(() => {
-    if (video && video.thumbnail) {
-      const img = new Image();
-      img.src = resolveMediaUrl(video.thumbnail);
-      img.onload = () => {
-        if (img.width && img.height) {
-          setRatio(img.width / img.height);
-        }
-      };
-      img.onerror = () => {
-        setRatio(16 / 9);
-      };
-    }
-  }, [video]);
+    probe.onerror = () => {
+      clearTimeout(timeout);
+      setRatio('failed');
+    };
 
-  // Autoplay next effect when video ends
-  const handleVideoEnded = () => {
-    if (related.length > 0) {
-      navigate(`/video/${related[0]._id}`);
-    }
-  };
+    return () => {
+      clearTimeout(timeout);
+      probe.src = '';
+      probeRef.current = null;
+    };
+  }, [source.directUrl]);
 
-  const handleShareClick = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Still probing
+  if (ratio === null) {
+    return (
+      <div className="mx-auto w-full max-w-full">
+        <div
+          className="relative overflow-hidden rounded-[16px] bg-neutral-900 border border-white/5 shadow-2xl flex items-center justify-center"
+          style={{ aspectRatio: '16/9' }}
+        >
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
-  const handleLoadedMetadata = (e) => {
-    const { videoWidth, videoHeight } = e.target;
-    if (videoWidth && videoHeight) {
-      setRatio(videoWidth / videoHeight);
-    }
-  };
+  const numericRatio = typeof ratio === 'number' ? ratio : 16 / 9;
+  const isPortrait = typeof ratio === 'number' && ratio < 0.99;
+  const isSquare   = typeof ratio === 'number' && ratio >= 0.99 && ratio <= 1.01;
 
-  // Helper to parse different video URL sources and construct their respective player configurations
-  const getVideoSource = (url) => {
-    if (!url) return { type: 'unknown', url: '' };
+  const outerClass = [
+    'mx-auto w-full',
+    isPortrait ? 'max-w-[420px]' : isSquare ? 'max-w-[500px]' : 'max-w-full',
+  ].join(' ');
 
-    // Google Drive
-    if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
-      let fileId = '';
-      if (url.includes('/file/d/')) {
-        const match = url.match(/\/file\/d\/([^/]+)/);
-        if (match) fileId = match[1];
-      } else {
-        const match = url.match(/[?&]id=([^&]+)/);
-        if (match) fileId = match[1];
-      }
-      if (fileId) {
-        return {
-          type: 'drive-direct',
-          fileId,
-          url: `https://drive.google.com/uc?export=download&id=${fileId}`,
-          embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
-        };
-      }
-    }
-
-    // YouTube
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      let videoId = '';
-      if (url.includes('youtu.be/')) {
-        videoId = url.split('youtu.be/')[1]?.split(/[?#]/)[0];
-      } else if (url.includes('embed/')) {
-        videoId = url.split('embed/')[1]?.split(/[?#]/)[0];
-      } else {
-        const match = url.match(/[?&]v=([^&]+)/);
-        if (match) videoId = match[1];
-      }
-      if (videoId) {
-        return {
-          type: 'youtube',
-          videoId,
-          embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`
-        };
-      }
-    }
-
-    // Vimeo
-    if (url.includes('vimeo.com')) {
-      const match = url.match(/(?:video\/|vimeo\.com\/)(\d+)/);
-      if (match) {
-        const videoId = match[1];
-        return {
-          type: 'vimeo',
-          videoId,
-          embedUrl: `https://player.vimeo.com/video/${videoId}?autoplay=1&playsinline=1`
-        };
-      }
-    }
-
-    // Default to direct HTML5 video (MP4/WebM/R2 streams)
-    return { type: 'direct', url };
-  };
-
-  const renderActivePlayer = (source) => {
-    if (source.type === 'youtube' || source.type === 'vimeo') {
-      return (
+  return (
+    <div className={outerClass}>
+      <div
+        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl"
+        style={{ aspectRatio: String(numericRatio) }}
+      >
         <iframe
           src={source.embedUrl}
-          title={video.title}
-          className="absolute inset-0 w-full h-full border-none bg-black"
+          title="Video Player"
+          className="absolute inset-0 w-full h-full border-0"
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
           allowFullScreen
           webkitallowfullscreen="true"
           mozallowfullscreen="true"
+          loading="lazy"
         />
-      );
-    }
+      </div>
+    </div>
+  );
+};
 
-    // For Google Drive, we attempt to play directly. If it fails (e.g. large file virus scan), we could fallback, but native controls are required.
-    // Direct Native Video playback (R2/MP4/Drive-direct) with clean native controls
-    return (
-      <video
-        ref={videoRef}
-        src={resolveMediaUrl(source.url)}
-        poster={resolveMediaUrl(video.thumbnail)}
-        controls
-        preload="metadata"
-        playsInline
-        webkit-playsinline="true"
-        className="absolute inset-0 w-full h-full bg-transparent outline-none"
-        style={{ objectFit: 'cover' }}
-        onEnded={handleVideoEnded}
-        onLoadedMetadata={handleLoadedMetadata}
-        onError={(e) => {
-          if (source.type === 'drive-direct' && videoRef.current) {
-            // Fallback to iframe if direct stream fails due to file size limits
-            const iframe = document.createElement('iframe');
-            iframe.src = source.embedUrl;
-            iframe.className = "absolute inset-0 w-full h-full border-none bg-black";
-            iframe.allow = "autoplay; fullscreen; encrypted-media; picture-in-picture";
-            iframe.allowFullscreen = true;
-            videoRef.current.parentNode.replaceChild(iframe, videoRef.current);
-          }
-        }}
+// ─────────────────────────────────────────────────────────────────────────────
+// Generic iframe player — YouTube, Vimeo (always 16:9)
+// ─────────────────────────────────────────────────────────────────────────────
+const IframePlayer = ({ embedUrl }) => (
+  <div className="mx-auto w-full max-w-full">
+    <div
+      className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl"
+      style={{ aspectRatio: '16/9' }}
+    >
+      <iframe
+        src={embedUrl}
+        title="Video Player"
+        className="absolute inset-0 w-full h-full border-0"
+        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+        allowFullScreen
+        loading="lazy"
       />
-    );
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top-level dispatcher — picks the correct player based on source type.
+// Parent MUST key this with video._id so it fully unmounts between videos.
+// ─────────────────────────────────────────────────────────────────────────────
+const UniversalVideoPlayer = ({ video, onEnded }) => {
+  const resolved = resolveMediaUrl(video.videoUrl);
+  const source   = parseVideoSource(resolved);
+  const poster   = resolveMediaUrl(video.thumbnail);
+
+  if (source.type === 'drive') {
+    return <DrivePlayer source={source} poster={poster} onEnded={onEnded} />;
+  }
+
+  if (source.type === 'youtube' || source.type === 'vimeo') {
+    return <IframePlayer embedUrl={source.embedUrl} />;
+  }
+
+  // direct / R2 / MP4
+  return <NativePlayer src={resolveMediaUrl(source.src)} poster={poster} onEnded={onEnded} />;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page component
+// ─────────────────────────────────────────────────────────────────────────────
+const VideoPlayerPage = () => {
+  const { id }      = useParams();
+  const navigate    = useNavigate();
+
+  const [video,   setVideo]   = useState(null);
+  const [related, setRelated] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copied,  setCopied]  = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setVideo(null);
+      setRelated([]);
+      try {
+        const res = await API.get(`/videos/${id}`);
+        if (!cancelled && res.data.success) {
+          setVideo(res.data.data);
+          setRelated(res.data.related || []);
+        }
+      } catch (err) {
+        console.error('Error loading video:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  const handleEnded = () => {
+    if (related.length > 0) navigate(`/video/${related[0]._id}`);
   };
 
-  if (loading) {
-    return <VideoPlayerPageSkeleton />;
-  }
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) return <VideoPlayerPageSkeleton />;
 
   if (!video) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-6">
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-6 px-6">
         <p className="text-xs text-neutral-400 font-light">Cinematic video clip was not found.</p>
-        <Link to="/" className="text-[10px] uppercase tracking-widest bg-white text-black px-6 py-3 rounded-full font-bold">
+        <Link
+          to="/"
+          className="text-[10px] uppercase tracking-widest bg-white text-black px-6 py-3 rounded-full font-bold"
+        >
           Back to Work
         </Link>
       </div>
     );
   }
 
-  const source = getVideoSource(resolveMediaUrl(video.videoUrl));
-  const isPortrait = ratio < 1;
-
   return (
-    <div className="relative min-h-screen bg-[#0A0A0A] text-white pt-24 pb-16 px-6 md:px-12 overflow-hidden select-none">
-      
-      {/* Blurred Ambient Backdrop generated from Thumbnail */}
+    <div className="relative min-h-screen bg-[#0A0A0A] text-white pt-12 pb-16 px-4 md:px-8 overflow-hidden">
+
+      {/* Ambient blurred backdrop */}
       <div
-        className="absolute inset-0 bg-cover bg-center filter blur-[100px] opacity-15 scale-110 pointer-events-none z-0 transition-all duration-1000"
-        style={{ backgroundImage: `url(${resolveMediaUrl(video.thumbnail)})` }}
+        className="absolute inset-0 bg-cover bg-center pointer-events-none z-0"
+        style={{
+          backgroundImage: `url(${resolveMediaUrl(video.thumbnail)})`,
+          filter: 'blur(80px)',
+          opacity: 0.12,
+          transform: 'scale(1.1)',
+        }}
       />
 
-      <div className="relative z-10 max-w-[1200px] mx-auto space-y-8">
-        
-        {/* Back and Share buttons */}
-        <div className="flex items-center justify-between">
+      <div className="relative z-10 max-w-[1100px] mx-auto space-y-6">
+
+        {/* ── Top bar ── */}
+        <div className="flex items-center justify-between pt-4">
           <Link
             to="/"
             className="flex items-center space-x-2 text-[10px] uppercase tracking-widest text-neutral-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Showcase</span>
+            <span>Back</span>
           </Link>
-          
+
           <button
-            onClick={handleShareClick}
+            onClick={handleShare}
             className="flex items-center space-x-2 text-[10px] uppercase tracking-widest text-neutral-400 hover:text-white transition-colors border border-white/5 bg-[#171717] px-4 py-2 rounded-full"
             id="share-frame-btn"
           >
-            {copied ? <Check className="w-3 text-green-400" /> : <Share2 className="w-3" />}
-            <span>{copied ? 'Copied' : 'Share Frame'}</span>
+            {copied ? <Check className="w-3 h-3 text-green-400" /> : <Share2 className="w-3 h-3" />}
+            <span>{copied ? 'Copied' : 'Share'}</span>
           </button>
         </div>
 
-        {/* Responsive Aspect-Ratio Video Container */}
-        <div className="w-full max-w-full mx-auto flex justify-center">
-          <div
-            className={`video-player-container relative w-full rounded-[16px] overflow-hidden border border-white/5 shadow-2xl transition-all duration-500 bg-transparent ${
-              isPortrait
-                ? 'max-w-full sm:max-w-[420px]'
-                : 'max-w-full'
-            }`}
-            style={{ aspectRatio: isPortrait ? ratio : (ratio && ratio !== 16/9 ? ratio : '16/9') }}
-          >
-            {renderActivePlayer(source)}
-          </div>
-        </div>
+        {/* ── Player — keyed by id so it fully unmounts between videos ── */}
+        <UniversalVideoPlayer
+          key={video._id}
+          video={video}
+          onEnded={handleEnded}
+        />
 
-        {/* Video Information Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 pt-6">
-          
-          {/* Main Info */}
+        {/* ── Info grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-4">
+
+          {/* Title & description */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center space-x-3 text-[9px] uppercase tracking-widest text-neutral-500">
-              <span className="bg-white/5 border border-white/5 text-neutral-300 px-3 py-1 rounded-full font-bold">
-                {video.category?.name}
-              </span>
+              {video.category?.name && (
+                <span className="bg-white/5 border border-white/5 text-neutral-300 px-3 py-1 rounded-full font-bold">
+                  {video.category.name}
+                </span>
+              )}
               <span className="flex items-center space-x-1 font-mono">
                 <Clock className="w-3 h-3" />
                 <span>{video.duration || '00:00'}</span>
               </span>
             </div>
-            
-            <h1 className="text-2xl md:text-4xl uppercase font-extrabold tracking-tight text-white leading-tight font-sans">
+
+            <h1 className="text-2xl md:text-4xl uppercase font-extrabold tracking-tight text-white leading-tight">
               {video.title}
             </h1>
-            
-            <p className="text-neutral-400 text-xs md:text-sm font-light leading-relaxed whitespace-pre-line pt-2">
-              {video.description}
-            </p>
+
+            {video.description && (
+              <p className="text-neutral-400 text-xs md:text-sm font-light leading-relaxed whitespace-pre-line">
+                {video.description}
+              </p>
+            )}
           </div>
 
-          {/* Minimal Film Metadata Column */}
+          {/* Film metadata card */}
           <div className="bg-[#171717] border border-white/5 p-6 rounded-[16px] space-y-6 self-start">
-            <h4 className="text-[10px] uppercase tracking-widest font-bold border-b border-white/5 pb-3 text-white">Film Log</h4>
+            <h4 className="text-[10px] uppercase tracking-widest font-bold border-b border-white/5 pb-3 text-white">
+              Film Log
+            </h4>
             <div className="space-y-4 text-xs font-light text-neutral-400">
               <div className="flex justify-between">
                 <span>Total Views</span>
@@ -279,18 +403,23 @@ const VideoPlayerPage = () => {
                 <span>Date Logged</span>
                 <span className="text-white flex items-center space-x-1">
                   <Calendar className="w-3.5 h-3.5 text-neutral-500" />
-                  <span>{new Date(video.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}</span>
+                  <span>
+                    {new Date(video.createdAt).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                    })}
+                  </span>
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Related Visuals Grid */}
+        {/* ── Related videos ── */}
         {related.length > 0 && (
-          <div className="pt-16 border-t border-white/5 space-y-8">
-            <h3 className="text-sm uppercase tracking-wider font-extrabold font-sans">Related Visuals</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="pt-12 border-t border-white/5 space-y-6">
+            <h3 className="text-sm uppercase tracking-wider font-extrabold">Related Visuals</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {related.map((item) => (
                 <Link
                   key={item._id}
@@ -302,14 +431,15 @@ const VideoPlayerPage = () => {
                     <img
                       src={resolveMediaUrl(item.thumbnail)}
                       alt={item.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 filter brightness-95"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 brightness-90"
+                      loading="lazy"
                     />
                     <span className="absolute bottom-2 right-2 bg-black/80 text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded font-mono">
                       {item.duration || '00:00'}
                     </span>
                   </div>
-                  <div className="p-4 space-y-1">
-                    <h4 className="text-xs font-bold uppercase tracking-wide truncate group-hover:text-neutral-300 transition-colors">
+                  <div className="p-3">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wide truncate group-hover:text-neutral-300 transition-colors">
                       {item.title}
                     </h4>
                   </div>
@@ -318,6 +448,7 @@ const VideoPlayerPage = () => {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

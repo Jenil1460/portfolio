@@ -135,10 +135,48 @@ body.hide-custom-cursor .mouse-follower-ring {
   visibility: hidden !important;
 }
 
-.video-player-container,
-.video-player-container iframe,
+/* ── Production Video Player Rules ─────────────────────────────────────────── */
+
+/* Ensure the <video> element and iframes always fill their positioned parent */
 .video-player-container video,
-.video-player-container .react-player,
-.video-player-container [role="application"] {
-  cursor: auto !important;
+.video-player-container iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000;
+  display: block;
 }
+
+/* Native <video> — use contain so portrait/square/anamorphic frames never crop */
+.video-player-container video {
+  object-fit: contain;
+}
+
+/* Prevent iOS Safari from popping the video out of the page */
+video {
+  -webkit-playsinline: true;
+}
+
+/* Remove any extra margin/padding that could shift the controls bar off screen */
+video::-webkit-media-controls {
+  overflow: visible !important;
+}
+
+/* On mobile, ensure videos never overflow their container horizontally */
+@media (max-width: 768px) {
+  .video-player-container {
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .video-player-container video {
+    max-width: 100vw;
+  }
+
+  .video-player-container iframe {
+    max-width: 100vw;
+  }
+}
+
