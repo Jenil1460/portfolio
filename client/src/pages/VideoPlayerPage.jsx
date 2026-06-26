@@ -15,11 +15,12 @@ const VideoPlayerPage = () => {
   // Player Playback & UI States
   const [copied, setCopied] = useState(false);
   const [playerHovered, setPlayerHovered] = useState(false);
-  const [playbackStarted, setPlaybackStarted] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [aspectRatio, setAspectRatio] = useState('landscape'); // 'landscape' or 'portrait'
   
   const playerWrapperRef = useRef(null);
+  const videoRef = useRef(null);
 
   // Detect mobile and touch capability on mount
   useEffect(() => {
@@ -45,7 +46,7 @@ const VideoPlayerPage = () => {
   useEffect(() => {
     const fetchVideoDetails = async () => {
       setLoading(true);
-      setPlaybackStarted(false); // Reset playback state for new video view
+      setPlaying(false); // Reset playing state for new video view
       try {
         const res = await API.get(`/videos/${id}`);
         if (res.data.success) {
@@ -91,6 +92,20 @@ const VideoPlayerPage = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePlayClick = (e) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.play()
+        .then(() => {
+          setPlaying(true);
+        })
+        .catch((err) => {
+          console.warn("Programmatic play failed. User must use native controls.", err);
+          setPlaying(true);
+        });
+    }
   };
 
   // Helper to parse different video URL sources and construct their respective player configurations
@@ -155,35 +170,7 @@ const VideoPlayerPage = () => {
   };
 
   const renderActivePlayer = (source) => {
-    if (source.type === 'drive') {
-      return (
-        <iframe
-          src={source.embedUrl}
-          title={video.title}
-          className="absolute inset-0 w-full h-full border-none bg-black"
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          allowFullScreen
-          webkitallowfullscreen="true"
-          mozallowfullscreen="true"
-        />
-      );
-    }
-
-    if (source.type === 'youtube') {
-      return (
-        <iframe
-          src={source.embedUrl}
-          title={video.title}
-          className="absolute inset-0 w-full h-full border-none bg-black"
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          allowFullScreen
-          webkitallowfullscreen="true"
-          mozallowfullscreen="true"
-        />
-      );
-    }
-
-    if (source.type === 'vimeo') {
+    if (source.type === 'drive' || source.type === 'youtube' || source.type === 'vimeo') {
       return (
         <iframe
           src={source.embedUrl}
@@ -199,16 +186,30 @@ const VideoPlayerPage = () => {
 
     // Direct Native Video playback (R2/MP4/etc.)
     return (
-      <video
-        src={source.url}
-        poster={video.thumbnail}
-        controls
-        autoPlay
-        playsInline
-        webkit-playsinline="true"
-        className="absolute inset-0 w-full h-full object-contain bg-black"
-        onEnded={handleVideoEnded}
-      />
+      <div className="relative w-full h-full">
+        <video
+          ref={videoRef}
+          src={source.url}
+          poster={video.thumbnail}
+          controls
+          playsInline
+          webkit-playsinline="true"
+          className="absolute inset-0 w-full h-full object-contain bg-black"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={handleVideoEnded}
+        />
+        {!playing && (
+          <div
+            onClick={handlePlayClick}
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center cursor-pointer z-20 group transition-all duration-300"
+          >
+            <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-all duration-400 shadow-2xl flex items-center justify-center">
+              <Play className="w-8 h-8 fill-black text-black ml-1" />
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -272,28 +273,7 @@ const VideoPlayerPage = () => {
                 : 'max-w-full aspect-video max-h-[75vh] sm:max-h-[80vh] lg:max-h-none'
             }`}
           >
-            {playbackStarted ? (
-              renderActivePlayer(source)
-            ) : (
-              // Lazy load poster layout
-              <div
-                onClick={() => setPlaybackStarted(true)}
-                className="absolute inset-0 w-full h-full cursor-pointer group overflow-hidden select-none"
-              >
-                <img
-                  src={video.thumbnail}
-                  alt={video.title}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.75]"
-                  loading="eager"
-                />
-                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-500" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-all duration-400 shadow-2xl flex items-center justify-center">
-                    <Play className="w-8 h-8 fill-black text-black ml-1" />
-                  </div>
-                </div>
-              </div>
-            )}
+            {renderActivePlayer(source)}
           </div>
           
           {/* Prominent "Open Video" Button for Google Drive videos */}
