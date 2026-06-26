@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Share2, Eye, Calendar, Clock, Check, Play } from 'lucide-react';
-import ReactPlayer from 'react-player';
 import API from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
@@ -13,24 +12,10 @@ const VideoPlayerPage = () => {
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Custom Controls State
+  // Player Playback & UI States
   const [copied, setCopied] = useState(false);
   const [playerHovered, setPlayerHovered] = useState(false);
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
-  
-  const [playing, setPlaying] = useState(() => {
-    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    return !isTouchDevice;
-  });
-  
-  useEffect(() => {
-    const checkMobile = () => {
-      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      setIsMobileDevice(isTouch || isMobileUA);
-    };
-    checkMobile();
-  }, []);
+  const [playbackStarted, setPlaybackStarted] = useState(false);
   
   const playerWrapperRef = useRef(null);
 
@@ -48,6 +33,7 @@ const VideoPlayerPage = () => {
   useEffect(() => {
     const fetchVideoDetails = async () => {
       setLoading(true);
+      setPlaybackStarted(false); // Reset playback state for new video view
       try {
         const res = await API.get(`/videos/${id}`);
         if (res.data.success) {
@@ -77,29 +63,123 @@ const VideoPlayerPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Helper to structure Google Drive share links for iframe embed
-  const getEmbedUrl = (url) => {
-    if (!url) return '';
+  // Helper to parse different video URL sources and construct their respective player configuration details
+  const getVideoSource = (url) => {
+    if (!url) return { type: 'unknown', url: '' };
+
+    // Google Drive
     if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
       let fileId = '';
       if (url.includes('/file/d/')) {
-        const regExp = /\/file\/d\/([^/]+)/;
-        const match = url.match(regExp);
-        if (match && match[1]) {
-          fileId = match[1];
-        }
-      } else if (url.includes('?id=') || url.includes('&id=')) {
-        const regExp = /[?&]id=([^&]+)/;
-        const match = url.match(regExp);
-        if (match && match[1]) {
-          fileId = match[1];
-        }
+        const match = url.match(/\/file\/d\/([^/]+)/);
+        if (match) fileId = match[1];
+      } else {
+        const match = url.match(/[?&]id=([^&]+)/);
+        if (match) fileId = match[1];
       }
       if (fileId) {
-        return `https://drive.google.com/file/d/${fileId}/preview`;
+        return {
+          type: 'drive',
+          fileId,
+          embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+          fallbackUrl: `https://drive.google.com/file/d/${fileId}/view`
+        };
       }
     }
-    return url;
+
+    // YouTube
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      let videoId = '';
+      if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split(/[?#]/)[0];
+      } else if (url.includes('embed/')) {
+        videoId = url.split('embed/')[1]?.split(/[?#]/)[0];
+      } else {
+        const match = url.match(/[?&]v=([^&]+)/);
+        if (match) videoId = match[1];
+      }
+      if (videoId) {
+        return {
+          type: 'youtube',
+          videoId,
+          embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`
+        };
+      }
+    }
+
+    // Vimeo
+    if (url.includes('vimeo.com')) {
+      const match = url.match(/(?:video\/|vimeo\.com\/)(\d+)/);
+      if (match) {
+        const videoId = match[1];
+        return {
+          type: 'vimeo',
+          videoId,
+          embedUrl: `https://player.vimeo.com/video/${videoId}?autoplay=1&playsinline=1`
+        };
+      }
+    }
+
+    // Default to direct HTML5 video (MP4/WebM/etc.)
+    return { type: 'direct', url };
+  };
+
+  const renderActivePlayer = (source) => {
+    if (source.type === 'drive') {
+      return (
+        <iframe
+          src={source.embedUrl}
+          title={video.title}
+          className="absolute inset-0 w-full h-full border-none bg-black"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          webkitallowfullscreen="true"
+          mozallowfullscreen="true"
+        />
+      );
+    }
+
+    if (source.type === 'youtube') {
+      return (
+        <iframe
+          src={source.embedUrl}
+          title={video.title}
+          className="absolute inset-0 w-full h-full border-none bg-black"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          webkitallowfullscreen="true"
+          mozallowfullscreen="true"
+        />
+      );
+    }
+
+    if (source.type === 'vimeo') {
+      return (
+        <iframe
+          src={source.embedUrl}
+          title={video.title}
+          className="absolute inset-0 w-full h-full border-none bg-black"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          webkitallowfullscreen="true"
+          mozallowfullscreen="true"
+        />
+      );
+    }
+
+    // Direct Native Video playback
+    return (
+      <video
+        src={source.url}
+        poster={video.thumbnail}
+        controls
+        autoPlay
+        playsInline
+        webkit-playsinline="true"
+        className="absolute inset-0 w-full h-full object-contain bg-black"
+        onEnded={handleVideoEnded}
+      />
+    );
   };
 
   if (loading) {
@@ -117,8 +197,7 @@ const VideoPlayerPage = () => {
     );
   }
 
-  const isGoogleDrive = video.videoUrl.includes('drive.google.com');
-  const embedUrl = getEmbedUrl(video.videoUrl);
+  const source = getVideoSource(video.videoUrl);
 
   return (
     <div className="relative min-h-screen bg-[#0A0A0A] text-white pt-24 pb-16 px-6 md:px-12 overflow-hidden select-none">
@@ -151,63 +230,50 @@ const VideoPlayerPage = () => {
           </button>
         </div>
 
-        {/* Cinematic Video Player Container */}
-        <div
-          ref={playerWrapperRef}
-          onMouseEnter={() => setPlayerHovered(true)}
-          onMouseLeave={() => setPlayerHovered(false)}
-          className="video-player-container relative aspect-video w-full max-h-[75vh] sm:max-h-[80vh] lg:max-h-none mx-auto rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl"
-        >
-          {isGoogleDrive ? (
-            <iframe
-              src={embedUrl}
-              title={video.title}
-              className="absolute inset-0 w-full h-full border-none"
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-              allowFullScreen
-              webkitallowfullscreen="true"
-              mozallowfullscreen="true"
-            />
-          ) : (
-            <div className="relative w-full h-full">
-              {isMobileDevice ? (
-                <video
-                  src={video.videoUrl}
-                  poster={video.thumbnail}
-                  controls
-                  playsInline
-                  webkit-playsinline="true"
-                  className="absolute inset-0 w-full h-full object-contain bg-black"
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => setPlaying(false)}
-                  onEnded={handleVideoEnded}
+        {/* Responsive Aspect-Ratio Video Container */}
+        <div className="w-full max-w-full mx-auto">
+          <div
+            ref={playerWrapperRef}
+            onMouseEnter={() => setPlayerHovered(true)}
+            onMouseLeave={() => setPlayerHovered(false)}
+            className="video-player-container relative w-full aspect-video max-h-[75vh] sm:max-h-[80vh] lg:max-h-none rounded-[16px] overflow-hidden border border-white/5 bg-black shadow-2xl"
+          >
+            {playbackStarted ? (
+              renderActivePlayer(source)
+            ) : (
+              // Lazy load poster layout
+              <div
+                onClick={() => setPlaybackStarted(true)}
+                className="absolute inset-0 w-full h-full cursor-pointer group overflow-hidden select-none"
+              >
+                <img
+                  src={video.thumbnail}
+                  alt={video.title}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.75]"
+                  loading="eager"
                 />
-              ) : (
-                <>
-                  <ReactPlayer
-                    url={video.videoUrl}
-                    playing={playing}
-                    muted={false}
-                    controls={true}
-                    width="100%"
-                    height="100%"
-                    onPlay={() => setPlaying(true)}
-                    onPause={() => setPlaying(false)}
-                    onEnded={handleVideoEnded}
-                    className="absolute inset-0 w-full h-full"
-                  />
-                  {!playing && (
-                    <div
-                      onClick={() => setPlaying(true)}
-                      className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center cursor-pointer z-20 group transition-all duration-300"
-                    >
-                      <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-transform duration-300 shadow-2xl flex items-center justify-center">
-                        <Play className="w-6 h-6 fill-black text-black ml-0.5" />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors duration-500" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="bg-white text-black p-5 rounded-full transform scale-90 group-hover:scale-100 transition-all duration-400 shadow-2xl flex items-center justify-center">
+                    <Play className="w-8 h-8 fill-black text-black ml-1" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Fallback open button for Google Drive view limits */}
+          {source.type === 'drive' && (
+            <div className="flex justify-center pt-5">
+              <a
+                href={source.fallbackUrl || video.videoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 text-[10px] uppercase tracking-widest bg-white hover:bg-neutral-200 text-black px-6 py-3 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-lg"
+              >
+                <span>Open Video</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-external-link"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+              </a>
             </div>
           )}
         </div>
