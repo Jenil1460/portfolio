@@ -5,6 +5,80 @@ import { motion, AnimatePresence } from 'framer-motion';
 import API, { resolveMediaUrl } from '../services/api';
 import Logo from '../components/Logo';
 
+// Hook to detect image aspect ratio
+const useImageRatio = (imageUrl) => {
+  const [ratio, setRatio] = useState(null);
+
+  useEffect(() => {
+    if (!imageUrl) {
+      setRatio(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        setRatio(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.src = imageUrl;
+  }, [imageUrl]);
+
+  return { ratio };
+};
+
+const VideoCard = ({ video }) => {
+  const { ratio } = useImageRatio(resolveMediaUrl(video.thumbnail));
+  const isPortrait = ratio && ratio < 0.95;
+  const cardAspectRatio = isPortrait ? '9/16' : '16/9';
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      transition={{ duration: 0.4 }}
+      className="group border border-white/5 bg-[#171717] rounded-[16px] overflow-hidden flex flex-col justify-between hover:border-white/10 transition-colors shadow-2xl animate-fade-in"
+    >
+      {/* Thumbnail area with slight zoom and play icon fade in */}
+      <Link 
+        to={`/video/${video._id}`} 
+        className="block relative overflow-hidden bg-[#0A0A0A] clickable"
+        style={{ aspectRatio: cardAspectRatio }}
+      >
+        <img
+          src={resolveMediaUrl(video.thumbnail)}
+          alt={video.title}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7]"
+          loading="lazy"
+        />
+        
+        {/* Minimal Play Hover Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-400 bg-black/30">
+          <div className="bg-white text-black p-4 rounded-full transform scale-75 group-hover:scale-100 transition-transform duration-300">
+            <Play className="w-4 h-4 fill-black text-black" />
+          </div>
+        </div>
+
+        {/* Info Overlays */}
+        <span className="absolute top-4 left-4 bg-black/85 border border-white/5 text-[8px] uppercase tracking-widest text-white px-2.5 py-1 rounded-full font-semibold">
+          {video.category?.name}
+        </span>
+      </Link>
+      
+      {/* Minimal Information */}
+      <div className="p-6 space-y-2">
+        <Link to={`/video/${video._id}`} className="hover:text-neutral-300 transition-colors inline-block">
+          <h3 className="font-extrabold text-sm uppercase tracking-wider text-white truncate max-w-[250px]">{video.title}</h3>
+        </Link>
+        <p className="text-neutral-500 text-xs font-light line-clamp-2 leading-relaxed">
+          {video.description}
+        </p>
+      </div>
+    </motion.div>
+  );
+};
+
 const Home = () => {
   const [categories, setCategories] = useState([]);
   const [videos, setVideos] = useState([]);
@@ -183,47 +257,7 @@ const Home = () => {
             >
               <AnimatePresence mode="popLayout">
                 {videos.map((video) => (
-                  <motion.div
-                    key={video._id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.4 }}
-                    className="group border border-white/5 bg-[#171717] rounded-[16px] overflow-hidden flex flex-col justify-between hover:border-white/10 transition-colors shadow-2xl"
-                  >
-                    {/* Thumbnail area with slight zoom and play icon fade in */}
-                    <Link to={`/video/${video._id}`} className="block relative aspect-video overflow-hidden bg-[#0A0A0A] clickable">
-                      <img
-                        src={resolveMediaUrl(video.thumbnail)}
-                        alt={video.title}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-[0.85] group-hover:brightness-[0.7]"
-                        loading="lazy"
-                      />
-                      
-                      {/* Minimal Play Hover Overlay */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-400 bg-black/30">
-                        <div className="bg-white text-black p-4 rounded-full transform scale-75 group-hover:scale-100 transition-transform duration-300">
-                          <Play className="w-4 h-4 fill-black text-black" />
-                        </div>
-                      </div>
-
-                      {/* Info Overlays */}
-                      <span className="absolute top-4 left-4 bg-black/85 border border-white/5 text-[8px] uppercase tracking-widest text-white px-2.5 py-1 rounded-full font-semibold">
-                        {video.category?.name}
-                      </span>
-                    </Link>
-                    
-                    {/* Minimal Information */}
-                    <div className="p-6 space-y-2">
-                      <Link to={`/video/${video._id}`} className="hover:text-neutral-300 transition-colors inline-block">
-                        <h3 className="font-extrabold text-sm uppercase tracking-wider text-white truncate max-w-[250px]">{video.title}</h3>
-                      </Link>
-                      <p className="text-neutral-500 text-xs font-light line-clamp-2 leading-relaxed">
-                        {video.description}
-                      </p>
-                    </div>
-                  </motion.div>
+                  <VideoCard key={video._id} video={video} />
                 ))}
               </AnimatePresence>
             </motion.div>

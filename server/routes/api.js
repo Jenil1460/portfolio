@@ -268,9 +268,59 @@ router.get('/drive/:fileId', async (req, res) => {
   }
 });
 
+const parseDriveFileId = (rawUrl) => {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const driveMatch = rawUrl.match(/\/file\/d\/([^/?#&]+)/) || rawUrl.match(/[?&]id=([^&]+)/);
+  return driveMatch ? driveMatch[1] : null;
+};
+
+const preWarmFileCache = (fileId) => {
+  if (fileId && !urlCache.has(fileId)) {
+    console.log(`Pre-warming cache for Drive file ID: ${fileId}`);
+    getFinalDriveUrl(fileId)
+      .then((finalUrl) => {
+        urlCache.set(fileId, {
+          finalUrl,
+          expiresAt: Date.now() + 3 * 60 * 60 * 1000,
+        });
+        console.log(`Successfully pre-warmed cache for: ${fileId}`);
+      })
+      .catch((err) => {
+        console.warn(`Failed to pre-warm cache for ${fileId}:`, err.message);
+      });
+  }
+};
+
 // --- VIDEO ROUTING ---
-router.get('/videos', videoController.getVideos);
-router.get('/videos/:id', videoController.getVideoById);
+const originalGetVideos = videoController.getVideos;
+const originalGetVideoById = videoController.getVideoById;
+
+router.get('/videos', async (req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (body) {
+    if (body && body.success && Array.isArray(body.data)) {
+      body.data.forEach((video) => {
+        const fileId = parseDriveFileId(video.videoUrl);
+        preWarmFileCache(fileId);
+      });
+    }
+    return originalJson.call(this, body);
+  };
+  return originalGetVideos(req, res, next);
+});
+
+router.get('/videos/:id', async (req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (body) {
+    if (body && body.success && body.data) {
+      const fileId = parseDriveFileId(body.data.videoUrl);
+      preWarmFileCache(fileId);
+    }
+    return originalJson.call(this, body);
+  };
+  return originalGetVideoById(req, res, next);
+});
+
 router.get('/videos/category/:categoryId', videoController.getVideosByCategory);
 router.post('/videos', protect, videoController.createVideo);
 router.put('/videos/:id', protect, videoController.updateVideo);
