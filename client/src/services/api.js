@@ -61,6 +61,13 @@ export const resolveMediaUrl = (url) => {
     rootUrl = typeof window !== 'undefined' ? window.location.origin : '';
   }
 
+  // Redirect Google Drive thumbnails to our optimized proxy route
+  const driveMatch = url.match(/drive\.google\.com\/thumbnail\?id=([^&]+)/) || url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (driveMatch) {
+    const fileId = driveMatch[1];
+    return `${rootUrl}/api/thumbnail/${fileId}`;
+  }
+
   // Relative paths: prepend server root
   if (url.startsWith('/')) {
     return `${rootUrl}${url}`;
