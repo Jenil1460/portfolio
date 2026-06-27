@@ -182,33 +182,6 @@ const getFinalDriveUrl = async (fileId) => {
   return lastUrl;
 };
 
-// --- GOOGLE DRIVE THUMBNAIL PROXY ---
-router.get('/thumbnail/:fileId', async (req, res) => {
-  try {
-    const fileId = req.params.fileId;
-    if (!fileId) {
-      return res.status(400).json({ success: false, message: 'Missing file ID' });
-    }
-
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    const targetUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
-
-    https.get(targetUrl, (googleRes) => {
-      if (googleRes.statusCode === 200) {
-        res.setHeader('Content-Type', googleRes.headers['content-type'] || 'image/jpeg');
-        googleRes.pipe(res);
-      } else {
-        res.redirect('https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&q=80&w=600');
-      }
-    }).on('error', () => {
-      res.redirect('https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&q=80&w=600');
-    });
-  } catch (error) {
-    console.error('Thumbnail proxy error:', error);
-    res.redirect('https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&q=80&w=600');
-  }
-});
-
 router.get('/drive/:fileId', async (req, res) => {
   let activeUpstreamResponse = null;
 
