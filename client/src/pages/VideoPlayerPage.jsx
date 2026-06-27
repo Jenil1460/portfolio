@@ -464,6 +464,7 @@ const VideoPlayerPage = () => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     let cancelled = false;
     const load = async () => {
       setLoading(true);
