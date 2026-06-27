@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2, Check, Play, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Share2, Check, Play, ExternalLink, Instagram } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
@@ -577,11 +577,28 @@ const VideoPlayerPage = () => {
 
         {/* Info section */}
         <div className="pt-4 space-y-4 max-w-3xl">
-          <div className="flex items-center space-x-3 text-[9px] uppercase tracking-widest text-neutral-500">
-            {video.category?.name && (
-              <span className="bg-white/5 border border-white/5 text-neutral-300 px-3 py-1 rounded-full font-bold">
-                {video.category.name}
-              </span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3 text-[9px] uppercase tracking-widest text-neutral-500">
+              {video.category?.name && (
+                <span className="bg-white/5 border border-white/5 text-neutral-300 px-3 py-1 rounded-full font-bold">
+                  {video.category.name}
+                </span>
+              )}
+            </div>
+
+            {video.instagramLink && (
+              <div className="flex items-center space-x-2 text-[10px] uppercase tracking-widest text-neutral-400">
+                <span>Visit this video in &rarr;</span>
+                <a
+                  href={video.instagramLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center text-neutral-400 hover:text-white hover:scale-110 transition-all p-1"
+                  title="View on Instagram"
+                >
+                  <Instagram className="w-4 h-4 text-neutral-400 hover:text-[#E1306C] transition-colors duration-300" />
+                </a>
+              </div>
             )}
           </div>
 

@@ -145,7 +145,7 @@ const getVideosByCategory = async (req, res) => {
 // @access  Private
 const createVideo = async (req, res) => {
   try {
-    const { title, description, videoUrl, thumbnail, category, featured, published, duration } = req.body;
+    const { title, description, videoUrl, thumbnail, category, featured, published, duration, instagramLink } = req.body;
 
     if (!title || !videoUrl || !thumbnail || !category) {
       return res.status(400).json({
@@ -169,6 +169,7 @@ const createVideo = async (req, res) => {
       featured: featured || false,
       published: published !== undefined ? published : true,
       duration: duration || '00:00',
+      instagramLink: instagramLink || '',
     });
 
     const populatedVideo = await video.populate('category', 'name slug');
@@ -188,7 +189,7 @@ const createVideo = async (req, res) => {
 // @access  Private
 const updateVideo = async (req, res) => {
   try {
-    const { title, description, videoUrl, thumbnail, category, featured, published, duration } = req.body;
+    const { title, description, videoUrl, thumbnail, category, featured, published, duration, instagramLink } = req.body;
 
     let video = await Video.findById(req.params.id);
 
@@ -211,6 +212,7 @@ const updateVideo = async (req, res) => {
     video.featured = featured !== undefined ? featured : video.featured;
     video.published = published !== undefined ? published : video.published;
     video.duration = duration || video.duration;
+    video.instagramLink = instagramLink !== undefined ? instagramLink : video.instagramLink;
 
     await video.save();
 

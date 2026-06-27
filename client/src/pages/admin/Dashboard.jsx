@@ -27,6 +27,7 @@ const Dashboard = () => {
   const [vidCategory, setVidCategory] = useState('');
   const [vidVideoUrl, setVidVideoUrl] = useState('');
   const [vidThumbnail, setVidThumbnail] = useState('');
+  const [vidInstagramLink, setVidInstagramLink] = useState('');
   const [vidUploading, setVidUploading] = useState(false);
   const [vidSaving, setVidSaving] = useState(false);
 
@@ -357,6 +358,7 @@ const Dashboard = () => {
     setVidCategory('');
     setVidVideoUrl('');
     setVidThumbnail('');
+    setVidInstagramLink('');
     setVidModal({ open: true, mode: 'add', data: null });
   };
 
@@ -365,6 +367,7 @@ const Dashboard = () => {
     setVidCategory(vid.category?._id || vid.category || '');
     setVidVideoUrl(vid.videoUrl);
     setVidThumbnail(vid.thumbnail);
+    setVidInstagramLink(vid.instagramLink || '');
     setVidModal({ open: true, mode: 'edit', data: vid });
   };
 
@@ -401,6 +404,7 @@ const Dashboard = () => {
         category: vidCategory,
         videoUrl: vidVideoUrl.trim(),
         thumbnail: resolvedThumbnail,
+        instagramLink: vidInstagramLink.trim(),
       };
 
       // Detect and store the aspect ratio from the thumbnail
@@ -881,6 +885,22 @@ const Dashboard = () => {
                 />
                 <span className="text-[9px] text-neutral-500 uppercase tracking-widest font-light block mt-1">
                   Accepts Google Drive Preview URL, Instagram URL, or direct MP4 URL
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-wider text-neutral-400 font-bold block">
+                  Instagram Link (Optional)
+                </label>
+                <input
+                  type="url"
+                  value={vidInstagramLink}
+                  onChange={(e) => setVidInstagramLink(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-colors min-h-[44px]"
+                  placeholder="e.g. https://www.instagram.com/p/..."
+                />
+                <span className="text-[9px] text-neutral-500 uppercase tracking-widest font-light block mt-1">
+                  Optional link to redirect users to the Instagram post of this video
                 </span>
               </div>
 

@@ -41,6 +41,11 @@ const videoSchema = new mongoose.Schema(
       type: String,
       default: '00:00',
     },
+    instagramLink: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   { timestamps: true }
 );
