@@ -112,5 +112,15 @@
         }
       ]
     }
+  ],
+  "drivecaches": [
+    {
+      "_id": "6a3ffeec384c74a959a90cb7",
+      "createdAt": "2026-06-27T16:48:44.409Z",
+      "updatedAt": "2026-06-27T16:48:44.409Z",
+      "fileId": "12345TestFileId",
+      "finalUrl": "https://drive.usercontent.google.com/download?id=12345TestFileId&export=media",
+      "expiresAt": "2026-06-27T19:48:44.406Z"
+    }
   ]
 }

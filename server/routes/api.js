@@ -30,7 +30,7 @@ router.get('/auth/stats', protect, async (req, res) => {
   try {
     const totalCategories = await Category.countDocuments();
     const totalVideos = await Video.countDocuments();
-    
+
     // Recent videos list
     const recentVideos = await Video.find()
       .populate('category', 'name slug')

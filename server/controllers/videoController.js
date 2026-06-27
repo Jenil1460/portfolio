@@ -119,7 +119,7 @@ const getVideoById = async (req, res) => {
 const getVideosByCategory = async (req, res) => {
   try {
     const query = { category: req.params.categoryId };
-    
+
     // Only published videos for general public
     if (!req.headers.authorization) {
       query.published = true;
@@ -213,7 +213,7 @@ const updateVideo = async (req, res) => {
     video.duration = duration || video.duration;
 
     await video.save();
-    
+
     const populatedVideo = await video.populate('category', 'name slug');
 
     res.status(200).json({

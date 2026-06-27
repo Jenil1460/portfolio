@@ -219,10 +219,17 @@ const NativePlayer = ({ src, poster, onEnded }) => {
 const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
   const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
   const videoUrl = resolveDriveVideoUrl(source.fileId);
-  const { ratio: detectedRatio, ready } = useImageRatio(driveThumbnailUrl);
+  const { ratio: detectedRatio } = useImageRatio(driveThumbnailUrl);
   const posterUrl = storedThumbnail || driveThumbnailUrl;
   const [useIframe, setUseIframe] = useState(false);
   const [videoRatio, setVideoRatio] = useState(null);
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
+
+  useEffect(() => {
+    setUseIframe(false);
+    setVideoRatio(null);
+    setMetadataLoaded(false);
+  }, [source.fileId]);
 
   useEffect(() => {
     if (detectedRatio !== null) {
@@ -235,11 +242,11 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
     if (w && h) {
       setVideoRatio(w / h);
     }
+    setMetadataLoaded(true);
   }, []);
 
-  if (!ready) return <LoadingShell />;
-
-  const { outerClass, containerStyle } = getLayout(videoRatio || detectedRatio);
+  const currentRatio = videoRatio || detectedRatio || 1.777; // default to 16:9
+  const { outerClass, containerStyle } = getLayout(currentRatio);
 
   if (useIframe) {
     if (isMobile()) {
@@ -298,6 +305,11 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
         className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
         style={containerStyle}
       >
+        {!metadataLoaded && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/85">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
         <video
           src={videoUrl}
           poster={posterUrl}
@@ -314,7 +326,7 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
             }
           }}
           className="absolute inset-0 w-full h-full"
-          style={{ objectFit: 'contain', background: '#000' }}
+          style={{ objectFit: 'contain', background: '#000', opacity: metadataLoaded ? 1 : 0.2 }}
           webkit-playsinline="true"
           x-webkit-airplay="allow"
         />
@@ -387,9 +399,9 @@ const InstagramPlayer = ({ source, storedThumbnail }) => {
         ) : (
           <div className="absolute inset-0 bg-gradient-to-tr from-[#8a3ab9]/20 via-[#e95950]/20 to-[#fccc63]/20" />
         )}
-        
+
         <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300" />
-        
+
         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4 z-10">
           <div className="bg-white hover:bg-neutral-100 text-black p-5 rounded-full shadow-2xl flex items-center justify-center transform group-hover:scale-110 transition-all duration-300">
             <svg
@@ -405,7 +417,7 @@ const InstagramPlayer = ({ source, storedThumbnail }) => {
           </span>
         </div>
       </div>
-      
+
       <div className="flex flex-col items-center mt-4 space-y-2">
         <button
           onClick={() => window.open(source.url, '_blank')}
@@ -493,7 +505,7 @@ const VideoPlayerPage = () => {
   };
 
   const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href).catch(() => {});
+    navigator.clipboard.writeText(window.location.href).catch(() => { });
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

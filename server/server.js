@@ -28,16 +28,16 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl, or server-to-server)
     if (!origin) return callback(null, true);
-    
+
     const isVercel = origin.endsWith('.vercel.app') || origin.includes('vercel');
     const isAllowedLocal = allowedOrigins.includes(origin);
-    
+
     let isCustomAllowed = false;
     if (process.env.ALLOWED_ORIGINS) {
       const customOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
       isCustomAllowed = customOrigins.includes(origin);
     }
-    
+
     if (isAllowedLocal || isVercel || isCustomAllowed) {
       callback(null, true);
     } else {
@@ -65,11 +65,11 @@ app.use((req, res, next) => {
       const host = req.get('host');
       const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
       const baseUrl = `${protocol}://${host}`;
-      
+
       const updatedJsonString = jsonString
         .replace(/http:\/\/localhost:5000\/uploads\//g, `${baseUrl}/uploads/`)
         .replace(/http:\/\/127.0.0.1:5000\/uploads\//g, `${baseUrl}/uploads/`);
-        
+
       const updatedBody = JSON.parse(updatedJsonString);
       return originalJson.call(this, updatedBody);
     } catch (e) {
