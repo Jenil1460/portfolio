@@ -80,11 +80,26 @@ const VideoCard = ({ video }) => {
 };
 
 const Home = () => {
-  const [categories, setCategories] = useState([]);
-  const [videos, setVideos] = useState([]);
+  const [categories, setCategories] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_categories');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   
-  const [loadingCats, setLoadingCats] = useState(true);
-  const [loadingVids, setLoadingVids] = useState(true);
+  const [videos, setVideos] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_videos_all_page_1');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  
+  const [loadingCats, setLoadingCats] = useState(categories.length === 0);
+  const [loadingVids, setLoadingVids] = useState(videos.length === 0);
   const [errorCats, setErrorCats] = useState(null);
   const [errorVids, setErrorVids] = useState(null);
   
@@ -104,11 +119,11 @@ const Home = () => {
   // Fetch Categories
   const fetchCategories = useCallback(async () => {
     try {
-      setLoadingCats(true);
       setErrorCats(null);
       const res = await API.get('/categories?active=true');
       if (res.data.success) {
         setCategories(res.data.data);
+        localStorage.setItem('cached_categories', JSON.stringify(res.data.data));
       } else {
         setErrorCats('Failed to load categories');
       }
@@ -127,8 +142,21 @@ const Home = () => {
 
   // Fetch Videos
   const fetchVideos = useCallback(async () => {
-    setLoadingVids(true);
     setErrorVids(null);
+    const cacheKey = `cached_videos_${activeCategory}_page_${currentPage}`;
+    
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        setVideos(JSON.parse(cached));
+        setLoadingVids(false);
+      } else {
+        setLoadingVids(true);
+      }
+    } catch (e) {
+      setLoadingVids(true);
+    }
+
     try {
       const categoryParam = activeCategory !== 'all' ? activeCategory : '';
       const res = await API.get('/videos', {
@@ -142,6 +170,7 @@ const Home = () => {
       if (res.data.success) {
         setVideos(res.data.data);
         setTotalPages(res.data.pages || 1);
+        localStorage.setItem(cacheKey, JSON.stringify(res.data.data));
       } else {
         setErrorVids('Failed to fetch videos');
       }

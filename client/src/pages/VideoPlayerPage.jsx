@@ -470,23 +470,50 @@ const VideoPlayerPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [video, setVideo] = useState(null);
-  const [related, setRelated] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [video, setVideo] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`cached_video_${id}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [related, setRelated] = useState(() => {
+    try {
+      const cached = localStorage.getItem(`cached_related_${id}`);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(video === null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
     let cancelled = false;
     const load = async () => {
-      setLoading(true);
-      setVideo(null);
-      setRelated([]);
+      try {
+        const cachedVid = localStorage.getItem(`cached_video_${id}`);
+        const cachedRel = localStorage.getItem(`cached_related_${id}`);
+        if (cachedVid) {
+          setVideo(JSON.parse(cachedVid));
+          setRelated(cachedRel ? JSON.parse(cachedRel) : []);
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
+      } catch (e) {
+        setLoading(true);
+      }
+
       try {
         const res = await API.get(`/videos/${id}`);
         if (!cancelled && res.data.success) {
           setVideo(res.data.data);
           setRelated(res.data.related || []);
+          localStorage.setItem(`cached_video_${id}`, JSON.stringify(res.data.data));
+          localStorage.setItem(`cached_related_${id}`, JSON.stringify(res.data.related || []));
         }
       } catch (err) {
         console.error('Error loading video:', err);

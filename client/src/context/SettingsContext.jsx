@@ -4,7 +4,7 @@ import API from '../services/api';
 export const SettingsContext = createContext();
 
 export const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState({
+  const defaultSettings = {
     companyName: 'TWOSHOT Studios',
     logoUrl: '',
     heroVideoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-cinematic-forest-with-sunbeams-4837-large.mp4',
@@ -49,14 +49,31 @@ export const SettingsProvider = ({ children }) => {
         image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=400',
       },
     ],
+  };
+
+  const [settings, setSettings] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_settings');
+      return cached ? JSON.parse(cached) : defaultSettings;
+    } catch {
+      return defaultSettings;
+    }
   });
-  const [loading, setLoading] = useState(true);
+
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem('cached_settings');
+    } catch {
+      return true;
+    }
+  });
 
   const fetchSettings = async () => {
     try {
       const response = await API.get('/settings');
       if (response.data.success) {
         setSettings(response.data.data);
+        localStorage.setItem('cached_settings', JSON.stringify(response.data.data));
       }
     } catch (error) {
       console.error('Error fetching global settings:', error);
