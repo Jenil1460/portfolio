@@ -465,8 +465,10 @@ const HTML5Player = memo(({ src, poster, onEnded, initialRatio, onError }) => {
 
       {/* Invisible overlay to intercept taps and prevent native video tap-to-pause */}
       {canPlay && !error && (
-        <div 
-          className="absolute inset-0 z-25" 
+        <button 
+          type="button"
+          aria-label="Toggle controls"
+          className="absolute inset-0 z-25 w-full h-full cursor-pointer bg-transparent border-none appearance-none outline-none" 
           onClick={toggleControls}
         />
       )}
