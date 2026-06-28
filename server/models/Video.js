@@ -46,6 +46,9 @@ const videoSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    aspectRatio: {
+      type: Number,
+    },
   },
   { timestamps: true }
 );

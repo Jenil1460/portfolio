@@ -62,8 +62,9 @@ export const resolveMediaUrl = (url) => {
   }
 
   // Relative paths: prepend server root
-  if (url.startsWith('/')) {
-    return `${rootUrl}${url}`;
+  if (url.startsWith('/') || url.startsWith('uploads/') || url.startsWith('uploads\\')) {
+    const cleanUrl = url.startsWith('/') ? url : `/${url.replace(/\\/g, '/')}`;
+    return `${rootUrl}${cleanUrl}`;
   }
 
   // Absolute localhost URLs stored in DB: replace host with real server root
@@ -73,6 +74,19 @@ export const resolveMediaUrl = (url) => {
   }
 
   return url;
+};
+
+export const resolveDriveVideoUrl = (fileId) => {
+  if (!fileId) return '';
+  let rootUrl;
+  if (baseUrl.startsWith('http')) {
+    rootUrl = baseUrl.endsWith('/api')
+      ? baseUrl.slice(0, -4)
+      : baseUrl.split('/api')[0];
+  } else {
+    rootUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  }
+  return `${rootUrl}/api/drive/${fileId}`;
 };
 
 export default API;

@@ -130,7 +130,7 @@ const getFinalDriveUrl = async (fileId) => {
         continue;
       }
 
-      // If we hit a 200 OK and it's an HTML page (virus scan warning), extract confirm token and uuid
+      // If we hit a 200 OK and it's an HTML page (virus scan warning OR quota exceeded), parse it
       if (response.statusCode === 200 && response.headers['content-type']?.includes('text/html')) {
         const body = await new Promise((resolve) => {
           let data = '';
@@ -145,7 +145,19 @@ const getFinalDriveUrl = async (fileId) => {
         });
         response.destroy();
 
-        // Extract hidden inputs for confirmation
+        // Detect Google Drive quota-exceeded error page
+        if (
+          body.includes('Quota exceeded') ||
+          body.includes('quota_exceeded') ||
+          body.includes('Too many users have viewed') ||
+          body.includes('uc-error-caption')
+        ) {
+          const err = new Error('Google Drive download quota exceeded for this file.');
+          err.code = 'DRIVE_QUOTA_EXCEEDED';
+          throw err;
+        }
+
+        // Extract hidden inputs for confirmation (virus-scan bypass)
         const inputs = {};
         const inputRegex = /<input[^>]+name="([^"]+)"[^>]+value="([^"]+)"/g;
         let match;
@@ -177,10 +189,41 @@ const getFinalDriveUrl = async (fileId) => {
     }
   } catch (err) {
     console.error('Redirect loop error:', err.message);
+    throw err;
   }
 
   return lastUrl;
 };
+
+router.get('/drive/check/:fileId', async (req, res) => {
+  try {
+    const fileId = req.params.fileId;
+    if (!fileId) {
+      return res.status(400).json({ success: false, message: 'Missing Drive file ID' });
+    }
+
+    const testUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+
+    https.get(testUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    }, (googleRes) => {
+      const location = googleRes.headers.location || '';
+      const isRestricted = (googleRes.statusCode === 302 && location.includes('accounts.google.com'));
+
+      if (isRestricted) {
+        return res.json({ success: true, embeddable: false });
+      }
+      return res.json({ success: true, embeddable: true });
+    }).on('error', () => {
+      return res.json({ success: true, embeddable: true });
+    });
+  } catch (error) {
+    console.error('Drive check error:', error);
+    res.json({ success: true, embeddable: false });
+  }
+});
 
 router.get('/drive/:fileId', async (req, res) => {
   let activeUpstreamResponse = null;
@@ -261,8 +304,15 @@ router.get('/drive/:fileId', async (req, res) => {
 
     response.pipe(res);
   } catch (error) {
-    console.error('Drive proxy error:', error);
+    console.error('Drive proxy error:', error.message);
     if (!res.headersSent) {
+      if (error.code === 'DRIVE_QUOTA_EXCEEDED') {
+        return res.status(429).json({
+          success: false,
+          code: 'DRIVE_QUOTA_EXCEEDED',
+          message: 'Google Drive download quota exceeded. The file has been viewed too many times. Please try again later or migrate to Cloudflare R2.',
+        });
+      }
       res.status(500).json({ success: false, message: 'Drive proxy failed' });
     }
   }
