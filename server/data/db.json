@@ -18,7 +18,7 @@
       "order": 2,
       "active": true,
       "name": "wedding",
-      "coverImage": "http://localhost:5000/uploads/1782410725303-ca7cb1r-WhatsApp_Image_2026_06_21_at_5.12.34_PM.jpeg",
+      "coverImage": "https://pub-e6f260e5585e478f97539f033602e015.r2.dev/categories/1782410725303-ca7cb1r-WhatsApp_Image_2026_06_21_at_5.12.34_PM.jpeg",
       "description": "wedding",
       "slug": "wedding"
     },
@@ -29,7 +29,7 @@
       "order": 4,
       "active": true,
       "name": "gym",
-      "coverImage": "http://localhost:5000/uploads/1782413125799-7ixw0gz-WhatsApp_Image_2026_06_21_at_5.12.26_PM.jpeg",
+      "coverImage": "https://pub-e6f260e5585e478f97539f033602e015.r2.dev/categories/1782413125799-7ixw0gz-WhatsApp_Image_2026_06_21_at_5.12.26_PM.jpeg",
       "description": "gymmmmmmmmmmmmmmmmmmm",
       "slug": "gym"
     }
@@ -60,7 +60,7 @@
       "title": "wedding",
       "description": "lagn",
       "videoUrl": "https://drive.google.com/file/d/1gC4Kv80LbbvLX2ZMPdgHX5eK52Smg4_4/view?usp=sharing",
-      "thumbnail": "http://localhost:5000/uploads/1782412646520-0l9e865-WhatsApp_Image_2026_05_13_at_12.38.19_PM.jpeg",
+      "thumbnail": "https://pub-e6f260e5585e478f97539f033602e015.r2.dev/videos/1782412646520-0l9e865-WhatsApp_Image_2026_05_13_at_12.38.19_PM.jpeg",
       "category": "6a3d6deb37162a6da5cab1de"
     }
   ],
