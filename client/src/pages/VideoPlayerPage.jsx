@@ -201,103 +201,12 @@ const NativePlayer = ({ src, poster, onEnded }) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DrivePlayer
-//
-// DESKTOP: Renders the Drive /preview iframe inside a correctly-sized container.
-//
-// MOBILE:  The Drive /preview iframe is terrible on mobile (overlapping controls,
-//          duplicate play buttons, broken seek bar — as seen in screenshots).
-//          Instead we show a clean poster thumbnail with a styled play button.
-//          Tapping opens the Drive file in a new tab where the user gets native
-//          mobile video playback with proper controls and fullscreen support.
-//
-// RATIO:   Always uses `https://drive.google.com/thumbnail?id={fileId}&sz=w800`
-//          for ratio detection, NOT the thumbnail stored in the database.
-//          Google's thumbnail API preserves the real video dimensions, so a 9:16
-//          video returns a 9:16 thumbnail. This fixes the problem where the
-//          admin-uploaded thumbnail might be landscape for a portrait video.
 // ─────────────────────────────────────────────────────────────────────────────
-const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
+const DrivePlayer = ({ source }) => {
   const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
-  const videoUrl = resolveDriveVideoUrl(source.fileId);
   const { ratio: detectedRatio } = useImageRatio(driveThumbnailUrl);
-  const posterUrl = storedThumbnail || driveThumbnailUrl;
-  const [useIframe, setUseIframe] = useState(false);
-  const [videoRatio, setVideoRatio] = useState(null);
-  const [metadataLoaded, setMetadataLoaded] = useState(false);
-
-  useEffect(() => {
-    setUseIframe(false);
-    setVideoRatio(null);
-    setMetadataLoaded(false);
-  }, [source.fileId]);
-
-  useEffect(() => {
-    if (detectedRatio !== null) {
-      setVideoRatio(detectedRatio);
-    }
-  }, [detectedRatio]);
-
-  const onLoadedMetadata = useCallback((event) => {
-    const { videoWidth: w, videoHeight: h } = event.currentTarget;
-    if (w && h) {
-      setVideoRatio(w / h);
-    }
-    setMetadataLoaded(true);
-  }, []);
-
-  const currentRatio = videoRatio || detectedRatio || 1.777; // default to 16:9
+  const currentRatio = detectedRatio || 1.777; // default to 16:9
   const { outerClass, containerStyle } = getLayout(currentRatio);
-
-  if (useIframe) {
-    if (isMobile()) {
-      return (
-        <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
-          <div
-            onClick={() => window.open(source.viewUrl || source.embedUrl, '_blank')}
-            className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container cursor-pointer group animate-fade-in"
-            style={containerStyle}
-          >
-            <img
-              src={posterUrl}
-              alt="Play Video"
-              className="absolute inset-0 w-full h-full object-cover filter brightness-[0.5] transition-transform duration-500 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
-              <div className="bg-white text-black p-5 rounded-full shadow-2xl flex items-center justify-center transform group-hover:scale-110 transition-all duration-300">
-                <Play className="w-8 h-8 fill-black text-black ml-1" />
-              </div>
-              <span className="text-[10px] uppercase tracking-[0.2em] bg-black/70 border border-white/10 px-5 py-2 rounded-full font-bold text-neutral-300">
-                Play in Drive
-              </span>
-            </div>
-          </div>
-          <p className="text-[10px] uppercase tracking-widest text-neutral-400 text-center mt-3 leading-relaxed px-4">
-            Stream fallback: Tap above to play natively in a new tab.
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
-        <div
-          className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
-          style={containerStyle}
-        >
-          <iframe
-            src={source.embedUrl}
-            title="Drive Video Player"
-            className="absolute inset-0 w-full h-full border-0"
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            allowFullScreen
-            webkitallowfullscreen="true"
-            mozallowfullscreen="true"
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
@@ -305,50 +214,16 @@ const DrivePlayer = ({ source, storedThumbnail, onEnded }) => {
         className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
         style={containerStyle}
       >
-        {!metadataLoaded && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/85">
-            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-          </div>
-        )}
-        <video
-          src={videoUrl}
-          poster={posterUrl}
-          controls
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={onLoadedMetadata}
-          onEnded={onEnded}
-          onError={(e) => {
-            const mediaError = e.currentTarget.error;
-            console.warn('DrivePlayer HTML5 video error:', mediaError);
-            if (mediaError && mediaError.code !== 1) {
-              setUseIframe(true);
-            }
-          }}
-          className="absolute inset-0 w-full h-full"
-          style={{ objectFit: 'contain', background: '#000', opacity: metadataLoaded ? 1 : 0.2 }}
-          webkit-playsinline="true"
-          x-webkit-airplay="allow"
+        <iframe
+          src={source.embedUrl}
+          title="Drive Video Player"
+          className="absolute inset-0 w-full h-full border-0"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          webkitallowfullscreen="true"
+          mozallowfullscreen="true"
         />
       </div>
-      {isMobile() ? (
-        <div className="flex flex-col items-center mt-4 space-y-2">
-          <button
-            onClick={() => window.open(source.viewUrl || source.embedUrl, '_blank')}
-            className="inline-flex items-center justify-center space-x-2 text-[10px] uppercase tracking-[0.2em] bg-white hover:bg-neutral-200 text-black px-6 py-3 rounded-full font-bold transition-all duration-300 transform active:scale-95 shadow-md"
-          >
-            <span>Open in Drive</span>
-            <ExternalLink className="w-3 h-3 text-black" />
-          </button>
-          <p className="text-[9px] text-neutral-500 font-light text-center leading-relaxed">
-            Trouble playing? Tap above to open in Google Drive.
-          </p>
-        </div>
-      ) : (
-        <p className="text-[10px] uppercase tracking-widest text-neutral-400 text-center mt-3">
-          Native Drive playback in page with mobile controls enabled.
-        </p>
-      )}
     </div>
   );
 };
