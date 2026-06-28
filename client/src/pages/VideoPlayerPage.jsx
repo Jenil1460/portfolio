@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2, Check, Play, ExternalLink, Instagram } from 'lucide-react';
+import { ArrowLeft, Share2, Check, ExternalLink, Instagram } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 
@@ -71,7 +71,6 @@ const parseVideoSource = (rawUrl) => {
 };
 
 const resolveDriveThumbnailUrl = (fileId) => `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
-const resolveDriveVideoUrl = (fileId) => resolveMediaUrl(`/api/drive/${fileId}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook: detect aspect ratio from an image URL
@@ -126,7 +125,7 @@ const getLayout = (ratio) => {
   const maxWidth = isPortrait ? 420 : '100%';
 
   return {
-    outerClass: 'mx-auto w-full',
+    outerClass: 'mx-auto w-full animate-fade-in',
     containerStyle: {
       width: '100%',
       maxWidth,
@@ -135,29 +134,38 @@ const getLayout = (ratio) => {
   };
 };
 
-// Spinner shown while ratio is being detected
-const LoadingShell = () => (
-  <div className="mx-auto w-full max-w-full">
-    <div
-      className="relative rounded-[16px] bg-neutral-900 border border-white/5 shadow-2xl flex items-center justify-center"
-      style={{ aspectRatio: '16/9' }}
-    >
-      <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-    </div>
-  </div>
-);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // NativePlayer — direct MP4 / Cloudflare R2
 // ─────────────────────────────────────────────────────────────────────────────
-const NativePlayer = ({ src, poster, onEnded }) => {
+const NativePlayer = memo(({ src, poster, onEnded }) => {
   const [ratio, setRatio] = useState(null);
   const [metadataLoaded, setMetadataLoaded] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(true);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [hasError, setHasError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  
+  const videoRef = useRef(null);
 
+  // Reset states on source/retry changes
   useEffect(() => {
-    setRatio(null);
     setMetadataLoaded(false);
-  }, [src]);
+    setIsBuffering(true);
+    setProgressPercent(0);
+    setHasError(false);
+  }, [src, retryKey]);
+
+  // Cleanup to prevent memory leaks and cancel requests
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        const video = videoRef.current;
+        video.pause();
+        video.src = '';
+        video.load();
+      }
+    };
+  }, []);
 
   const onLoadedMetadata = useCallback((event) => {
     const { videoWidth: w, videoHeight: h } = event.currentTarget;
@@ -167,48 +175,38 @@ const NativePlayer = ({ src, poster, onEnded }) => {
     setMetadataLoaded(true);
   }, []);
 
+  const onWaiting = () => {
+    setIsBuffering(true);
+  };
+
+  const onPlaying = () => {
+    setIsBuffering(false);
+    setMetadataLoaded(true);
+  };
+
+  const onCanPlay = () => {
+    setIsBuffering(false);
+  };
+
+  const onProgress = (event) => {
+    const video = event.currentTarget;
+    if (video.buffered && video.buffered.length > 0 && video.duration) {
+      const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+      const percent = Math.round((bufferedEnd / video.duration) * 100);
+      setProgressPercent(percent);
+    }
+  };
+
+  const onError = () => {
+    setHasError(true);
+    setIsBuffering(false);
+  };
+
+  const handleRetry = () => {
+    setRetryKey(prev => prev + 1);
+  };
+
   const { outerClass, containerStyle } = getLayout(ratio);
-
-  return (
-    <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
-      <div
-        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
-        style={containerStyle}
-      >
-        {!metadataLoaded && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80">
-            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-          </div>
-        )}
-
-        <video
-          src={src}
-          poster={poster}
-          controls
-          playsInline
-          preload="metadata"
-          onLoadedMetadata={onLoadedMetadata}
-          onEnded={onEnded}
-          className="absolute inset-0 w-full h-full"
-          style={{ objectFit: 'contain', background: '#000', opacity: metadataLoaded ? 1 : 0 }}
-          webkit-playsinline="true"
-          x-webkit-airplay="allow"
-        />
-      </div>
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DrivePlayer
-// ─────────────────────────────────────────────────────────────────────────────
-const DrivePlayer = ({ source, storedThumbnail }) => {
-  const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
-  const targetImage = storedThumbnail || driveThumbnailUrl;
-  const { ratio: detectedRatio } = useImageRatio(targetImage);
-  const currentRatio = detectedRatio || 1.777; // default to 16:9
-  const { outerClass, containerStyle } = getLayout(currentRatio);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   return (
     <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
@@ -216,16 +214,115 @@ const DrivePlayer = ({ source, storedThumbnail }) => {
         className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container flex items-center justify-center"
         style={containerStyle}
       >
-        {/* Smooth loading spinner overlay */}
-        {!iframeLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#0d0d0d] z-10">
+        {/* 1. Blurred Background Poster */}
+        {poster && (
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center filter blur-xl scale-110 opacity-30 transition-opacity duration-500"
+            style={{ backgroundImage: `url(${poster})` }}
+          />
+        )}
+
+        {/* 2. Error Message Overlay */}
+        {hasError ? (
+          <div className="absolute inset-0 z-25 flex flex-col items-center justify-center bg-black/95 px-6 text-center space-y-4 animate-fade-in">
+            <span className="text-xs font-light text-neutral-400">Unable to load video.</span>
+            <button
+              onClick={handleRetry}
+              className="px-5 py-2 text-[10px] uppercase tracking-wider bg-white hover:bg-neutral-200 text-black font-bold rounded-full transition-all active:scale-95 shadow-md"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+
+        {/* 3. Spinner Overlay (fades out when metadataLoaded + buffering finishes) */}
+        {(!metadataLoaded || isBuffering) && !hasError && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 px-6 space-y-3">
             <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            <span className="text-[10px] uppercase tracking-widest text-neutral-300 font-medium">
+              {isBuffering ? "Buffering..." : "Loading Video..."}
+              {progressPercent > 0 && progressPercent < 100 ? ` ${progressPercent}%` : ""}
+            </span>
           </div>
         )}
+
+        {/* 4. HTML5 Video Player */}
+        {!hasError && (
+          <video
+            key={`${src}-${retryKey}`}
+            ref={videoRef}
+            src={src}
+            poster={poster}
+            controls
+            playsInline
+            preload="metadata"
+            autoPlay
+            onLoadedMetadata={onLoadedMetadata}
+            onWaiting={onWaiting}
+            onPlaying={onPlaying}
+            onCanPlay={onCanPlay}
+            onProgress={onProgress}
+            onError={onError}
+            onEnded={onEnded}
+            className="absolute inset-0 w-full h-full z-10 transition-opacity duration-300"
+            style={{
+              objectFit: 'contain',
+              background: 'transparent',
+              opacity: metadataLoaded ? 1 : 0
+            }}
+            webkit-playsinline="true"
+            x-webkit-airplay="allow"
+          />
+        )}
+      </div>
+    </div>
+  );
+});
+
+NativePlayer.displayName = 'NativePlayer';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IframePlayer — Google Drive, YouTube, Vimeo
+// ─────────────────────────────────────────────────────────────────────────────
+const IframePlayer = memo(({ embedUrl, poster, ratio }) => {
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const { ratio: detectedRatio } = useImageRatio(poster);
+  const currentRatio = ratio || detectedRatio || 1.777; // default to 16:9
+  const { outerClass, containerStyle } = getLayout(currentRatio);
+
+  useEffect(() => {
+    setIframeLoaded(false);
+  }, [embedUrl]);
+
+  return (
+    <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
+      <div
+        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container flex items-center justify-center"
+        style={containerStyle}
+      >
+        {/* 1. Blurred Background Poster */}
+        {poster && !iframeLoaded && (
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center filter blur-xl scale-110 opacity-30 transition-opacity duration-500"
+            style={{ backgroundImage: `url(${poster})` }}
+          />
+        )}
+
+        {/* 2. Spinner Overlay */}
+        {!iframeLoaded && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 px-6 space-y-3">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            <span className="text-[10px] uppercase tracking-widest text-neutral-300 font-medium">
+              Loading Video...
+            </span>
+          </div>
+        )}
+
+        {/* 3. Embedded Video Iframe */}
         <iframe
-          src={source.embedUrl}
-          title="Drive Video Player"
-          className="absolute inset-0 w-full h-full border-0 transition-opacity duration-500 ease-in-out"
+          src={embedUrl}
+          title="Video Player"
+          className="absolute inset-0 w-full h-full border-0 z-10 transition-opacity duration-500 ease-in-out"
           style={{ opacity: iframeLoaded ? 1 : 0 }}
           onLoad={() => setIframeLoaded(true)}
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
@@ -236,36 +333,16 @@ const DrivePlayer = ({ source, storedThumbnail }) => {
       </div>
     </div>
   );
-};
-// ─────────────────────────────────────────────────────────────────────────────
-// IframePlayer — YouTube / Vimeo (always 16:9)
-// ─────────────────────────────────────────────────────────────────────────────
-const IframePlayer = ({ embedUrl }) => (
-  <div className="mx-auto w-full max-w-full">
-    <div
-      className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl"
-      style={{ aspectRatio: '16/9' }}
-    >
-      <iframe
-        src={embedUrl}
-        title="Video Player"
-        className="absolute inset-0 w-full h-full border-0"
-        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-        allowFullScreen
-      />
-    </div>
-  </div>
-);
+});
+
+IframePlayer.displayName = 'IframePlayer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // InstagramPlayer — Instagram posts/reels.
-// Since Instagram blocks embedding inside iframes on external sites via strict security
-// headers, we show a clean poster thumbnail with the Instagram brand overlay.
-// Clicking it opens the reel/post in a new tab (which opens the native Instagram app).
 // ─────────────────────────────────────────────────────────────────────────────
-const InstagramPlayer = ({ source, storedThumbnail }) => {
+const InstagramPlayer = memo(({ source, storedThumbnail }) => {
   const { ratio } = useImageRatio(storedThumbnail);
-  const displayRatio = ratio || 0.8; // Reels are vertical, default to 4:5
+  const displayRatio = ratio || 0.8; // Reels default to portrait 4:5
   const { outerClass, containerStyle } = getLayout(displayRatio);
 
   return (
@@ -317,7 +394,9 @@ const InstagramPlayer = ({ source, storedThumbnail }) => {
       </div>
     </div>
   );
-};
+});
+
+InstagramPlayer.displayName = 'InstagramPlayer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Top-level dispatcher — key with video._id in parent for clean unmount
@@ -328,15 +407,28 @@ const UniversalVideoPlayer = ({ video, onEnded }) => {
   const storedThumbnail = resolveMediaUrl(video.thumbnail);
 
   if (source.type === 'drive') {
-    return <DrivePlayer source={source} storedThumbnail={storedThumbnail} onEnded={onEnded} />;
+    const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
+    const posterUrl = storedThumbnail || driveThumbnailUrl;
+    return (
+      <IframePlayer
+        embedUrl={source.embedUrl}
+        poster={posterUrl}
+      />
+    );
+  }
+
+  if (source.type === 'youtube' || source.type === 'vimeo') {
+    return (
+      <IframePlayer
+        embedUrl={source.embedUrl}
+        poster={storedThumbnail}
+        ratio={1.777}
+      />
+    );
   }
 
   if (source.type === 'instagram') {
     return <InstagramPlayer source={source} storedThumbnail={storedThumbnail} />;
-  }
-
-  if (source.type === 'youtube' || source.type === 'vimeo') {
-    return <IframePlayer embedUrl={source.embedUrl} />;
   }
 
   return (
@@ -453,7 +545,7 @@ const VideoPlayerPage = () => {
           </button>
         </div>
 
-        {/* Player */}
+        {/* Player Container - key ensures clean unmount/remount on navigation */}
         <UniversalVideoPlayer
           key={video._id}
           video={video}
