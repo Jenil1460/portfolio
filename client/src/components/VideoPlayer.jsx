@@ -132,7 +132,7 @@ const IconDots = () => (
 // disappears automatically once playback starts.
 // ─────────────────────────────────────────────────────────────────────────────────
 const DRIVE_CLIP_TOP = 60;   // px to crop from the Drive top bar
-const DRIVE_CLIP_BOT = 65;   // px to crop from the Drive bottom controls bar
+const DRIVE_CLIP_BOT = 0;    // set to 0 because controls auto-hide and clipping crops the video
 
 const IframePlayer = memo(({ embedUrl, poster, initialRatio }) => {
   const imgRatio = useThumbnailRatio(poster);
@@ -184,15 +184,6 @@ const IframePlayer = memo(({ embedUrl, poster, initialRatio }) => {
         allowFullScreen
       />
 
-      {/* For Drive: solid black strip at the very bottom of the container.
-          This acts as a second safety layer against any Drive control bar
-          pixels that survive the CSS clip (e.g. on unusual viewport sizes). */}
-      {isDrive && loaded && (
-        <div
-          className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none"
-          style={{ height: `${DRIVE_CLIP_BOT}px`, background: '#000' }}
-        />
-      )}
     </div>
   );
 });
