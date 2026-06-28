@@ -52,6 +52,8 @@ const createCategory = async (req, res) => {
     // Check if category name already exists
     const categoryExists = await Category.findOne({ name });
     if (categoryExists) {
+      const { deleteR2ObjectByUrl } = require('../utils/r2Cleanup');
+      await deleteR2ObjectByUrl(coverImage);
       return res.status(400).json({ success: false, message: 'Category with this name already exists' });
     }
 
@@ -69,6 +71,10 @@ const createCategory = async (req, res) => {
     });
   } catch (error) {
     console.error('Create category error:', error);
+    if (req.body && req.body.coverImage) {
+      const { deleteR2ObjectByUrl } = require('../utils/r2Cleanup');
+      await deleteR2ObjectByUrl(req.body.coverImage);
+    }
     res.status(500).json({ success: false, message: 'Server error creating new category' });
   }
 };

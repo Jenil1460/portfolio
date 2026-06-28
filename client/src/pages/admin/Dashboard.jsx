@@ -77,7 +77,7 @@ const Dashboard = () => {
   };
 
   // Image Upload handler
-  const handleImageUpload = async (e, setUrl, setUploading) => {
+  const handleImageUpload = async (e, setUrl, setUploading, folder = 'uploads') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -91,7 +91,7 @@ const Dashboard = () => {
     formData.append('image', file);
 
     try {
-      const res = await API.post('/upload/image', formData, {
+      const res = await API.post(`/upload/image?folder=${folder}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (res.data.success) {
@@ -244,7 +244,7 @@ const Dashboard = () => {
             formData.append('image', file);
             
             try {
-              const res = await API.post('/upload/image', formData, {
+              const res = await API.post('/upload/image?folder=videos', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
               });
               if (res.data.success) {
@@ -777,7 +777,7 @@ const Dashboard = () => {
                         type="file"
                         className="hidden"
                         accept="image/*"
-                        onChange={(e) => handleImageUpload(e, setCatCoverImage, setCatUploading)}
+                        onChange={(e) => handleImageUpload(e, setCatCoverImage, setCatUploading, 'categories')}
                         disabled={catUploading}
                       />
                     </label>
@@ -934,7 +934,7 @@ const Dashboard = () => {
                         type="file"
                         className="hidden"
                         accept="image/*"
-                        onChange={(e) => handleImageUpload(e, setVidThumbnail, setVidUploading)}
+                        onChange={(e) => handleImageUpload(e, setVidThumbnail, setVidUploading, 'videos')}
                         disabled={vidUploading}
                       />
                     </label>

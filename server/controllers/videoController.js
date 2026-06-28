@@ -157,6 +157,8 @@ const createVideo = async (req, res) => {
     // Validate category exists
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
+      const { deleteR2ObjectByUrl } = require('../utils/r2Cleanup');
+      await deleteR2ObjectByUrl(thumbnail);
       return res.status(404).json({ success: false, message: 'Target category not found' });
     }
 
@@ -180,6 +182,10 @@ const createVideo = async (req, res) => {
     });
   } catch (error) {
     console.error('Create video error:', error);
+    if (req.body && req.body.thumbnail) {
+      const { deleteR2ObjectByUrl } = require('../utils/r2Cleanup');
+      await deleteR2ObjectByUrl(req.body.thumbnail);
+    }
     res.status(500).json({ success: false, message: 'Server error creating new video entry' });
   }
 };
