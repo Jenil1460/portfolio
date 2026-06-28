@@ -202,22 +202,32 @@ const NativePlayer = ({ src, poster, onEnded }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // DrivePlayer
 // ─────────────────────────────────────────────────────────────────────────────
-const DrivePlayer = ({ source }) => {
+const DrivePlayer = ({ source, storedThumbnail }) => {
   const driveThumbnailUrl = resolveDriveThumbnailUrl(source.fileId);
-  const { ratio: detectedRatio } = useImageRatio(driveThumbnailUrl);
+  const targetImage = storedThumbnail || driveThumbnailUrl;
+  const { ratio: detectedRatio } = useImageRatio(targetImage);
   const currentRatio = detectedRatio || 1.777; // default to 16:9
   const { outerClass, containerStyle } = getLayout(currentRatio);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   return (
     <div className={outerClass} style={{ maxWidth: containerStyle.maxWidth }}>
       <div
-        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container"
+        className="relative overflow-hidden rounded-[16px] bg-black border border-white/5 shadow-2xl video-player-container flex items-center justify-center"
         style={containerStyle}
       >
+        {/* Smooth loading spinner overlay */}
+        {!iframeLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0d0d0d] z-10">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
         <iframe
           src={source.embedUrl}
           title="Drive Video Player"
-          className="absolute inset-0 w-full h-full border-0"
+          className="absolute inset-0 w-full h-full border-0 transition-opacity duration-500 ease-in-out"
+          style={{ opacity: iframeLoaded ? 1 : 0 }}
+          onLoad={() => setIframeLoaded(true)}
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
           allowFullScreen
           webkitallowfullscreen="true"
