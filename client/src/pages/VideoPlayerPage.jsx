@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Share2, Check } from 'lucide-react';
+import { ArrowLeft, Share2, Check, Instagram } from 'lucide-react';
 import API, { resolveMediaUrl } from '../services/api';
 import { VideoPlayerPageSkeleton } from '../components/SkeletonLoader';
 import VideoPlayer from '../components/VideoPlayer';
